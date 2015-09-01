@@ -1,0 +1,12 @@
+#!/bin/bash
+
+function bleh {
+	IFS=''
+	while read line
+	do
+		echo $line
+	done < docformetest2
+}
+
+
+bleh

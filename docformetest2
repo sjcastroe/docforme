@@ -1,0 +1,22 @@
+	/**
+	 * @api {post} ?object=""&action="" ""
+	 * @apiName ""
+	 * @apiGroup ""
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 ""
+Hello my name is
+game grumpsSergiohahahahaalelelelele	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName 
+	 * @apiGroup 
+	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName 
+	 * @apiGroup 
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName 
+	 * @apiGroup 
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object

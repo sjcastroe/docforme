@@ -1,0 +1,855 @@
+ass DialrulesController extends AppController {
+
+	public $uses = array('Dialrule','Dialplan');
+	public $layout = 'api';
+
+	public function __GetPagintaion($form)
+	{
+		$conditions = array();
+		if (isset($form['start']))
+			$conditions['start'] = $form['start'];
+		if (isset($form['limit']))
+			$conditions['limit'] = $form['limit'];
+		if (isset($form['sort']))
+			$conditions['sort'] = $form['sort'];
+		return $conditions;
+	}
+			
+	public function __GetConditions($conditions,$form)
+	{
+		return $this->__GetDialRulesSeachConditions($conditions, $form);
+	    
+	    if (isset($form['domain']))
+			$domain = $form['domain'];
+		if (isset($form['owner_domain']))
+			$domain = $form['owner_domain'];
+		if (isset($form['owner_domain']))
+			$domain = $form['owner_domain'];
+		
+	
+		
+		if ($form['object']=='phonenumber' && isset($domain) && !isset($form['dest_domain']))
+		{
+			$form['dest_domain'] = $domain;
+		}
+		
+		if (isset($form['dialplan']))
+			$dialplan = $form['dialplan'];
+		if (isset($form['plan']))
+			$dialplan = $form['plan'];
+		
+		if (isset($form['matchrule']))
+			$matchrule = $form['matchrule'];
+		elseif(isset($form['matchrule_LIKE']))
+			$conditions['matchrule LIKE'] =$form['matchrule_LIKE'];	
+		
+		if (isset($form['match_from']))
+			$conditions['match_from'] = $form['match_from'];
+		
+		if (isset($form['parameter']))
+			$conditions['parameter'] = $form['parameter'];
+		
+		
+		
+				
+		if (isset($form['application']))
+			$conditions['responder LIKE'] = $form['application'];
+		elseif (isset($form['responder']))
+			$conditions['responder LIKE'] = $form['responder'];
+		
+		if (isset($form['plan_description']))
+			$conditions['plan_description LIKE'] = $form['plan_description'];
+		if (isset($form['to_user']))
+			$conditions['to_user'] = $form['to_user'];
+		
+		if ($form['object']=='phonenumber')
+		{
+			$conditions['NOT']['OR'][0]['matchrule LIKE'] = "%?%";
+			$conditions['NOT']['OR'][1]['matchrule LIKE'] = "%[%";
+			$conditions['NOT']['OR'][2]['matchrule LIKE'] = "%*@%";
+		}
+			
+		if (isset($form['dest_domain']))
+		{
+			$conditions['OR'][0]['to_host'] = $form['dest_domain'];
+			$conditions['OR'][1]['AND']['to_user LIKE'] = "%.".$form['dest_domain'];
+			$conditions['OR'][1]['AND']['to_host'] = "conference-bridge";
+			$conditions['OR'][2]['parameter'] =  $form['dest_domain'];
+		}
+			
+
+		if ($form['object'] =="dialplan")
+		{
+			if(isset($domain))
+			{
+				$conditions['OR'][0]['domain'] = $domain;
+				$conditions['OR'][1]['domain'] = "admin-only";
+				$conditions['OR'][2]['domain'] = "*";
+			}
+		}
+		elseif(isset($domain))
+			$conditions['domain'] =$domain;
+		if(isset($dialplan))
+			$conditions['dialplan'] =$dialplan;
+		if(isset($matchrule))
+			$conditions['matchrule'] =$matchrule;
+		$conditions['object'] =$form['object'];
+
+		
+		return $conditions;
+	}
+	
+	public function __GetResellerConditions($conditions,$form)
+	{
+		
+		if (isset($form['dialplan']))
+			$dialplan = $form['dialplan'];
+		if (isset($form['plan']))
+			$dialplan = $form['plan'];
+		
+		if (isset($form['domain']))
+			$domain = $form['domain'];
+		if (isset($form['owner_domain']))
+			$domain = $form['owner_domain'];
+		if (isset($form['owner_domain']))
+			$domain = $form['owner_domain'];
+		
+		if (isset($form['matchrule']))
+			$matchrule = $form['matchrule'];
+		elseif(isset($form['matchrule_LIKE']))
+			$conditions['matchrule LIKE'] =$form['matchrule_LIKE'];
+		
+		if (isset($form['match_from']))
+			$conditions['match_from'] = $form['match_from'];
+		
+		
+		
+		
+		
+		
+		if (true)
+		{
+		    //newer way using LEFT JOIN
+		   $sql=" SELECT DISTINCT dialplan_config.`matchrule`,dialplan_config . * , domains_config.domain AS domain_owner, domains_config.description AS domain_description
+		    FROM  `dialplan_config`
+		    LEFT JOIN  `domains_config` ON ( (
+		            domains_config.`domain` = dialplan_config.`to_host`
+		    )
+		            OR (
+		                    dialplan_config.`to_host` =  'conference-bridge'
+		                    AND LOCATE( domains_config.`domain` , CONCAT(  '.', dialplan_config.to_user ) ) >0 )
+		            OR domains_config.`domain` = dialplan_config.`parameter`
+		    ) WHERE ";
+		   if(!isset($form['territory']))
+		   {
+		       $sql .= " ( domains_config.domain != '' OR ( ( dialplan_config.`to_host` = '[*]' OR  dialplan_config.`to_host` = '*' ) ) ) ";
+		   }
+		   elseif (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+		       $sql .= "  1=1  ";
+		   else 
+		        $sql .= "  domains_config.domain != ''  ";
+		    
+		}
+		else
+		{
+		    //older way without a JOIN
+    		$sql="SELECT DISTINCT dialplan_config.`matchrule`,dialplan_config . * , domains_config.domain AS domain_owner, domains_config.description AS domain_description 
+    		FROM dialplan_config, domains_config 
+    		WHERE 
+    		(
+    		    ( domains_config.domain != '' ";
+    
+    		if(!isset($form['territory']))
+    		    $sql .= " OR ( ( dialplan_config.`to_host` = '[*]' OR  dialplan_config.`to_host` = '*' )  AND dialplan_config.`responder` = 'AvailableDID' ) ";
+    		
+    		$sql.= ")  
+    		)
+    		AND (
+    		
+    				domains_config.`domain` = dialplan_config.`to_host`
+    				OR (
+    						dialplan_config.`to_host` = 'conference-bridge'
+    						AND LOCATE( domains_config.`domain` , CONCAT( '.', dialplan_config.to_user ) ) >0
+    				)
+    				OR domains_config.`domain` = dialplan_config.`parameter` ";
+    		
+    		if(!isset($form['territory']))
+    		    $sql .= " OR ( ( dialplan_config.`to_host` = '[*]' OR  dialplan_config.`to_host` = '*' ) && domains_config.domain = '')  ";
+    		$sql .= ") ";
+    		
+		
+		}
+		
+		$sql .= " AND dialplan_config.dialplan = '".$this->NsStringEscape($dialplan)."' ";
+		
+		
+		if(isset($form['matchrule']) || isset($form['matchrule_LIKE']) )
+		{
+			if (isset($matchrule))
+				$sql.= " AND dialplan_config.`matchrule` = '".$this->NsStringEscape($matchrule)."'";
+			elseif (isset($form['matchrule_LIKE']))
+				$sql.= " AND dialplan_config.`matchrule` LIKE '".$this->NsStringEscape($form['matchrule_LIKE'])."'";
+		}
+
+		{
+			if (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+			{
+				
+			}
+			else if(isset($form['territory'])  )
+				$sql .= " AND domains_config.`territory` = '".$this->NsStringEscape($form['territory'])."'";
+			
+			if (isset($domain))
+				$sql.= " AND domains_config.`domain` = '".$this->NsStringEscape($domain)."'";
+			if (isset($form['dest_domain']))
+				$sql.= " AND domains_config.`domain` = '".$this->NsStringEscape($form['dest_domain'])."'";
+			
+		}
+		
+		
+		
+		
+		if (isset($form['application']))
+			$sql.= " AND dialplan_config.`responder` LIKE '".$this->NsStringEscape($form['application'])."'";
+		if (isset($form['plan_description']))
+			$sql.= " AND dialplan_config.`plan_description` LIKE '".$this->NsStringEscape($form['plan_description'])."'";
+		if (isset($form['to_user']))
+			$sql.= " AND dialplan_config.`to_user` = '".$this->NsStringEscape($form['to_user'])."'";
+		
+		$sql .= " AND matchrule NOT LIKE '%?%' AND matchrule NOT LIKE '%*@%' AND matchrule NOT LIKE '%[%' " ;
+		
+		
+		$sql.= " ORDER BY `dialplan_config`.`matchrule` ASC ";
+		if (isset($form['start']) && isset($form['limit']))
+			$sql .=" LIMIT ".$this->NsStringEscape($form['start']).",".$this->NsStringEscape($form['limit']);
+		elseif (isset($form['limit']))
+			$sql .=" LIMIT ".$this->NsStringEscape($form['limit']);
+		else
+			$sql .=" LIMIT 20000";
+		$this->nslog("debug", "(".$this->name.".read) sql " . print_r($sql, true));
+		return $sql;
+	}
+	
+	public function __GetResellerConditionsCount($conditions,$form)
+	{
+	
+		if (isset($form['dialplan']))
+			$dialplan = $form['dialplan'];
+		if (isset($form['plan']))
+			$dialplan = $form['plan'];
+	
+		if (isset($form['domain']))
+			$domain = $form['domain'];
+		if (isset($form['owner_domain']))
+			$domain = $form['owner_domain'];
+		if (isset($form['owner_domain']))
+			$domain = $form['owner_domain'];
+	
+		if (isset($form['matchrule']))
+			$matchrule = $form['matchrule'];
+		elseif(isset($form['matchrule_LIKE']))
+			$conditions['matchrule LIKE'] =$form['matchrule_LIKE'];
+	
+		if (isset($form['match_from']))
+			$conditions['match_from'] = $form['match_from'];
+	
+		if (true)
+		{
+		    //newer way using LEFT JOIN
+		    $sql=" SELECT count(dialplan_config.matchrule) as total 
+		    FROM  `dialplan_config`
+		    LEFT JOIN  `domains_config` ON ( (
+		    domains_config.`domain` = dialplan_config.`to_host`
+		    )
+		    OR (
+		    dialplan_config.`to_host` =  'conference-bridge'
+		    AND LOCATE( domains_config.`domain` , CONCAT(  '.', dialplan_config.to_user ) ) >0 )
+		    OR domains_config.`domain` = dialplan_config.`parameter`
+		    ) WHERE ";
+		    if (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+		    	$sql .= "  1=1  ";
+		    else if(!isset($form['territory']))
+		   {
+		       $sql .= " ( domains_config.domain != '' OR ( ( dialplan_config.`to_host` = '[*]' OR  dialplan_config.`to_host` = '*' ) ) ) ";
+		   }
+		   else 
+		        $sql .= "  domains_config.domain != ''  ";
+		}
+		   
+		else
+		{
+		    $sql="SELECT count(dialplan_config.matchrule) as total
+		    FROM dialplan_config, domains_config
+		    WHERE (
+		    
+		    domains_config.`domain` = dialplan_config.`to_host`
+		    OR (
+		    dialplan_config.`to_host` = 'conference-bridge'
+		    AND LOCATE( domains_config.`domain` , CONCAT( '.', dialplan_config.to_user ) ) >0
+		    )
+		    OR domains_config.`domain` = dialplan_config.`parameter`
+		    ) ";
+		}
+		
+		$sql.= " AND dialplan_config.dialplan = '".$this->NsStringEscape($dialplan)."'";
+		
+		
+		if(isset($form['matchrule']) || isset($form['matchrule_LIKE']) )
+		{
+			if (isset($matchrule))
+				$sql.= " AND dialplan_config.`matchrule` = '".$this->NsStringEscape($matchrule)."'";
+			elseif (isset($form['matchrule_LIKE']))
+				$sql.= " AND dialplan_config.`matchrule` LIKE '".$this->NsStringEscape($form['matchrule_LIKE'])."'";
+				
+		}
+		
+		
+		{
+			if ((!isset($form['territory']) || $form['territory']=="[*]" ) && isset($this->token['scope']) && $this->token['scope'] =="Super User")
+			{
+				
+			}
+			else if(isset($form['territory'])  )
+				$sql .= " AND domains_config.`territory` = '".$this->NsStringEscape($form['territory'])."'";
+			
+			if(isset($form['matchrule']))
+			{
+				
+			}
+			else if (isset($domain))
+				$sql.= " AND domains_config.`domain` = '".$this->NsStringEscape($domain)."'";
+			else if (isset($form['dest_domain']) && $form['dest_domain']!="*")
+				$sql.= " AND domains_config.`domain` = '".$this->NsStringEscape($form['dest_domain'])."'";
+				
+		}
+		
+		if (isset($form['application']))
+			$sql.= " AND dialplan_config.`responder` LIKE '".$this->NsStringEscape($form['application'])."'";
+		if (isset($form['plan_description']))
+			$sql.= " AND dialplan_config.`plan_description` LIKE '".$this->NsStringEscape($form['plan_description'])."'";
+		if (isset($form['to_user']))
+			$sql.= " AND dialplan_config.`to_user` = '".$this->NsStringEscape($form['to_user'])."'";
+	
+		$sql .= " AND matchrule NOT LIKE '%?%' AND matchrule NOT LIKE '%*@%' AND matchrule NOT LIKE '%[%' " ;
+	
+		$this->nslog("debug", "(".$this->name.".read) sql " . print_r($sql, true));
+		return $sql;
+	}
+	
+	public function count($form) {
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='dialrule') {
+			$this->count_dialrules($form);
+		}
+		else if ($form['object']=='phonenumber') {
+			$this->count_dialrules($form);
+		}
+		
+		
+	}
+	
+	/**
+	 * @api {post} ?object=dialrule&action=count Count Dialrules in a Dialplan
+	 * @apiName CountDialrules
+	 * @apiGroup Dialrule
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain		Domain containing Dialplan with Dialrules to count.
+	 * @apiParam {String} dialplan		Dialplan with Dialrules to count.
+	 *      * @apiParamExample {json} Request-Example:
+	 *         {
+	 *             "domain" : yourdomain,
+	 *             "dialplan" : yourDomainsDialplan
+	 *         }
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialrule&action=count
+	 */
+	public function count_dialrules($form) {
+		$this->nslog("debug", "(".$this->name.".count) form " . print_r($form, true));
+		$conditions =array();
+		if (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+		{
+			$isSuper =true;//super
+		}
+		else if (isset($form['matchrule']) && (isset($form['plan']) || isset($form['dialplan'])) )
+		{
+			//ok
+		}
+		else if (!isset($form['territory']) && !isset($form['domain']) && !isset($form['owner_domain']) && !isset($form['dest_domain']))
+			$this->redirect(null, 400);
+		// If not enough supplied parameters, return status code 400 (Bad Request)
+
+		if ((isset($isSuper) || isset($form['territory']) ) && $form['object'] =='phonenumber')
+		{
+			//$conditions = $this->__GetPagintaion($form);
+			$r = $this->Dialrule->query($this->__GetResellerConditionsCount($conditions, $form));
+			if (isset($r[0]))
+				$r =$r[0];
+			if (isset($r[0]))
+				$r =$r[0];
+			$results['xml']= $r;
+		}
+		else 
+		{
+		
+		//$conditions = $this->__GetPagintaion($form);
+		$conditions = $this->__GetConditions($conditions,$form);
+		
+		
+			if (isset($conditions['matchrule']) && isset($conditions['dialplan']))
+			{
+				if (isset($conditions['OR'][0]['to_host']) && isset($conditions['OR'][1]['AND']['to_host']))
+					unset($conditions['OR']);
+			
+				if (isset($conditions['dest_domain']) && isset($conditions['dest_domain']))
+					unset($conditions['dest_domain']);
+				
+				if (isset($conditions['territory']) && isset($conditions['territory']))
+					unset($conditions['territory']);
+				
+			}
+			
+			$this->nslog("debug", "(".$this->name.".count) conditions " . print_r($conditions, true));
+			
+			$results = $this->Dialrule->nsCount($conditions);
+			
+		}
+		$this->nslog("debug", "(".$this->name.".count) form " . print_r($results, true));
+		$this->set('results',$results );
+		
+	}
+	
+	public function read($form) {
+
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='dialrule') {
+			$this->read_dialrules($form);
+		}
+		else if ($form['object']=='dialplan') {
+			$this->read_dialplans($form);
+		}
+		else if ($form['object']=='phonenumber') {
+			$this->read_dialrules($form);
+		}
+	}
+	
+	public function create($form) {
+	
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='dialrule') {
+			$this->create_dialrule($form);
+		}
+		else if ($form['object']=='dialplan') {
+			$this->create_dialplan($form);
+		}
+		else if ($form['object']=='phonenumber') {
+				
+			$this->create_dialrule($form);
+		}
+	}
+
+	/**
+	 * @api {post} ?object=dialrule&action=read Read Dialrules in a Dialplan
+	 * @apiName ReadDialrules
+	 * @apiGroup Dialrule
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain			Domain containing Dialplan from which to read Dialrules.
+	 * @apiParam {String} dialplan			Dialplan from which to read Dialrules.
+	 *      * @apiParamExample {json} Request-Example:
+	 *         {
+	 *             "domain" : yourDomain,
+	 *             "dialplan" : yourDomainsDialplan
+	 *         }
+	 * @apiSuccess {String} matchrule			Destination
+	 * @apiSuccess {String} match_from			Source
+	 * @apiSuccess {String} dow					Days of week 
+	 * @apiSuccess {String} tod_from			Time of Dial
+	 * @apiSuccess {String} tod_to				Time of Dial
+	 * @apiSuccess {String} valid_from			Starting date Dialrule is valid
+	 * @apiSuccess {String} valid_to			End date Dialrule is valid
+	 * @apiSuccess {String} responder			Application
+	 * @apiSuccess {String} parameter			Application parameter
+	 * @apiSuccess {String} to_scheme			Destination scheme translation
+	 * @apiSuccess {String} to_user				
+	 * @apiSuccess {String} to_host
+	 * @apiSuccess {String} from_name
+	 * @apiSuccess {String} from_scheme			Protocol used by sender (ex. 'sip:')???
+	 * @apiSuccess {String} from_user
+	 * @apiSuccess {String} from_host			
+	 * @apiSuccess {String} dialplan			Dialplan to which Dialrule belongs.
+	 * @apiSuccess {String} domain				Domain to which Dialplan containing Dialrule belongs.
+	 * @apiSuccess {String} plan_description	Description for Dialrule
+	 * 
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialrule&action=read
+	 */
+	public function read_dialrules($form) {
+		
+		$this->nslog("debug", "(".$this->name.".read) form " . print_r($form, true));
+		
+		if (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+		{
+		    if (!isset($form['dialplan']) && !isset($form['plan']))
+		        if ($form['action'] =='phonenumber')
+		            $form['dialplan'] = "DID Table";
+		    $isSuper =true;//super
+		}
+		elseif ((isset($form['matchrule']) || isset($form['matchrule_LIKE']) )   && (isset($form['plan']) || isset($form['dialplan'])) )
+		{
+			
+		}
+		elseif (!isset($form['territory']) && !isset($form['domain']) && !isset($form['owner_domain']) && !isset($form['dest_domain']))
+			$this->redirect(null, 400);
+		elseif (!isset($form['dialplan']) && !isset($form['plan']))
+		{
+			if ($form['action'] =='phonenumber')
+			{
+				$form['dialplan'] = "DID Table";
+				$form['plan'] = "DID Table";
+			}
+			else
+				$this->redirect(null, 400);
+		}
+			
+
+		if ((isset($isSuper) || isset($form['territory'])) && $form['object'] =='phonenumber')
+		{
+			$results['xml']['phonenumber']=array();
+			$conditions = $this->__GetPagintaion($form);
+			$posts = $this->Dialrule->query($this->__GetResellerConditions($conditions, $form));
+			foreach($posts as $r)
+			{
+				//$this->nslog("debug", "(".$this->name.".read) r " . print_r($r, true));
+				$r['dialplan_config']['domain_owner'] = $r['domains_config']['domain_owner'];
+				$r['dialplan_config']['domain_description'] = $r['domains_config']['domain_description'];
+				$results['xml']['phonenumber'][]=$r['dialplan_config'];
+			}	
+			$this->nslog("debug", "(".$this->name.".read) results " . print_r($results, true));
+			$this->set('results', $results);
+		}
+		else
+		{
+			$results['xml']['phonenumber']=array();
+			
+			$conditions = $this->__GetPagintaion($form);
+			$conditions = $this->__GetConditions($conditions,$form);
+			$this->nslog("debug", "(".$this->name.".read) conditions " . print_r($conditions, true));
+			$results = $this->Dialrule->nsRead($conditions);
+			$this->nslog("debug", "(".$this->name.".read) results " . print_r($results, true));
+			$this->set('results', $results);
+		}
+		
+			
+		
+	}
+	
+	/**
+	 * @api {post} ?object=dialplan&action=read Read Dialplans
+	 * @apiName ReadDialplans
+	 * @apiGroup Dialplan
+	 * @apiDescription Does not return any dialplan data. returns parse error ???
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain
+	 * @apiParam {String} dialplan
+	 * 	 * @apiParamExample {json} Request-Example:
+	 * 		{
+	 * 			"domain" : yourDomain
+	 * 		}
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialplan&action=read
+	 */
+	public function read_dialplans($form) {
+	
+		$this->nslog("debug", "(".$this->name.".read) form " . print_r($form, true));
+
+		$conditions = $this->__GetPagintaion($form);
+		$conditions = $this->__GetConditions($conditions,$form);
+		$this->nslog("debug", "(".$this->name.".read) conditions " . print_r($conditions, true));
+		$results = $this->Dialplan->nsRead($conditions);
+		$this->nslog("debug", "(".$this->name.".read) results " . print_r($results, true));
+		$this->set('results', $results);			
+	
+	}
+	
+	/**
+	 * @api {post} ?object=dialplan&action=create Create a Dialplan
+	 * @apiName CreateDialplan
+	 * @apiGroup Dialplan
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain			Domain of new Dialplan.
+	 * @apiParam {String} dialplan			Dial translation of new Dialplan.
+	 * @apiParam {String} plan_description	Description for new Dialplan.
+	 * 	 * @apiParamExample {json} Request-Example:
+	 * 		{
+	 * 			"domain" : yourDomain,
+	 * 			"dialplan" : newDialplanToCreate
+	 * 		}
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialplan&action=create
+	 */
+	public function create_dialplan($form) {
+	
+		$this->nslog("debug", "(".$this->name.".create) form " . print_r($form, true));
+		
+		if (!isset($form['dialplan']) && !isset($form['plan']))
+			return $this->errorResponse(400, "Need to include 'dialplan'");
+		if (!isset($form['domain']) )
+			return $this->errorResponse(400, "Need to include 'domain'");
+		
+		if (!isset($form['dialplan']) && isset($form['plan']))
+				$form['dialplan'] = $form['plan'];
+		
+		if (!isset($form['plan_description']) )
+			$form['plan_description'] = "dialplan for ". $form['domain'];
+		
+		
+		$form['id']=$form['dialplan'];
+		
+		if (!$this->Dialplan->nsCreate($form,  'dialplan_events', 'dialplan'))
+			return $this->errorResponse(400, "Failure from remote end");
+			
+		$this->redirect(null, 200);
+	
+	}
+	
+	/**
+	 * @api {post} ?object=dialrule&action=update Update a Dialrule
+	 * @apiName UpdateDialrule
+	 * @apiGroup Dialrule
+	 * @apiDescription A Dialrule's parameters may be updated except for its domain, dialplan, and matchrule. For these special parameters, a new Dialrule must be created.
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain		Domain containing Dialplan with Dialrule to update.
+	 * @apiParam {String} dialplan		Dialplan with Dialrule to update.
+	 * @apiParam {String} matchrule		Destination parameter of Dialrule to update.
+	 * @apiParam {String} [dow]			New days of week value of Dialrule.
+	 * @apiParam {String} [tod_from]	New value of Dialrule.
+	 * @apiParam {String} [tod_to]		New value of Dialrule.
+	 * @apiParam {String} [responder]	New value of Dialrule.
+	 * @apiParam {String} [parameter]	New value of Dialrule.
+	 * @apiParam {String} [to_scheme]	New value of Dialrule.
+	 * @apiParam {String} [to_user]		New value of Dialrule.
+	 * @apiParam {String} [to_host]		New value of Dialrule.
+	 * @apiParam {String} [from_name]	New value of Dialrule.
+	 * @apiParam {String} [from_scheme]	New value of Dialrule.
+	 * @apiParam {String} [from_user]	New value of Dialrule.
+	 * @apiParam {String} [from_host]	New value of Dialrule.
+	 * @apiParam {String} [plan_description]	New value of Dialrule.
+	 * 	 * @apiParamExample {json} Request-Example:
+	 * 		{
+	 * 			"domain" : yourDomain,
+	 * 			"dialplan" : yourDomainsDialplan,
+	 * 			"matchrule" : DialruleToUpdate,
+	 * 			"plan_description" : new description for your Dialrule
+	 * 		}
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialrule&action=update
+	 */
+	public function update($form) {
+	
+		$this->nslog("debug", "(".$this->name.".update) form " . print_r($form, true));
+		
+		if (!isset($form['dialplan']) && !isset($form['plan']))
+			return $this->errorResponse(400, "Need to include 'dialplan'");
+		if (!isset($form['domain']) && !isset($form['owner_domain']) && !isset($form['dest_domain']))
+			return $this->errorResponse(400, "Need to include 'domain'");
+		if (!isset($form['matchrule']) )
+			return $this->errorResponse(400, "Need to include 'matchrule'");
+		
+		if ($form['object'] =='phonenumber' && isset($form['from_host']))
+			unset($form['from_host']);
+		
+		$query['object'] = $form['object'];
+		$query['dialplan'] = $form['dialplan'];
+		$query['matchrule'] = $form['matchrule'];
+		$query['limit'] = 1;
+		
+		$this->nslog("debug", "(".$this->name.".update existing query) " . print_r($query, true));
+		$existing = $this->Dialrule->nsRead($query);
+		$this->nslog("debug", "(".$this->name.".update existing) " . print_r($existing, true));
+		
+		if (isset($existing['xml']['phonenumber'][0]['domain']))
+			$form['domain'] = $existing['xml']['phonenumber'][0]['domain'];
+		
+		$form['id']=$form['matchrule'];
+		$this->addAuditlogInfo($form,$form['matchrule']);
+		if (!$this->Dialrule->nsUpdate($form,  'dialplan_events', 'dialplan'))
+			return $this->errorResponse(400, "Failure from remote end");
+			
+		$this->redirect(null, 200);
+	}
+	
+	/**
+	 * @api {post} ?object=dialrule&action=create Create a Dialrule
+	 * @apiName CreateDialrule
+	 * @apiGroup Dialrule
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain		Domain containing Dialplan where new Diarlrule will be created.
+	 * @apiParam {String} dialplan		Dialplan where new Dialrule will be created.
+	 * @apiParam {String} matchrule		Destination parameter for new Dialrule.
+	 * @apiParam {String} to_user		Destination user translation.???
+	 * 	 * @apiParamExample {json} Request-Example:
+	 * 		{
+	 * 			"domain" : yourDomain,
+	 * 			"dialplan" : yourDomainsDialplan,
+	 * 			"matchrule" : yourNewDialrule,
+	 * 			"to_user" : User
+	 * 		}
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialrule&action=create
+	 */
+	public function create_dialrule($form) {
+	
+		$this->nslog("debug", "(".$this->name.".create) form " . print_r($form, true));
+	
+		if (!isset($form['dialplan']) && !isset($form['plan']))
+			return $this->errorResponse(400, "Need to include 'dialplan'");
+		if (!isset($form['domain']) && !isset($form['owner_domain']) && !isset($form['dest_domain']))
+			return $this->errorResponse(400, "Need to include 'domain'");
+		if (!isset($form['matchrule']) )
+			return $this->errorResponse(400, "Need to include 'matchrule'");
+		//if (!isset($form['to_host']) )
+		//	return $this->errorResponse(400, "Need to include 'to_host'");
+		if (!isset($form['to_user']) )
+			return $this->errorResponse(400, "Need to include 'to_user'");
+	
+		$form['id']=$form['matchrule'];
+		
+		if ($form['object']=="phonenumber" && !isset($form['domain']))
+			$form['domain']="admin-only";
+		$this->addAuditlogInfo($form,$form['matchrule']);
+		if (!$this->Dialrule->nsCreate($form,  'dialplan_events', 'dialplan'))
+			return $this->errorResponse(400, "Failure from remote end");
+			
+		$this->redirect(null, 200);
+	}
+	
+	/**
+	 * @api {post} ?object=dialrule&action=delete Delete a Dialrule
+	 * @apiName DeleteDialrule
+	 * @apiGroup Dialrule
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain		Domain containing Dialplan with Dialrule to delete.
+	 * @apiParam {String} dialplan		Dialplan with Dialrule to delete.
+	 * @apiParam {String} matchrule		Destination parameter of Dialrule to delete.
+	 * 	 * @apiParamExample {json} Request-Example:
+	 * 		{
+	 * 			"domain" : yourDomain,
+	 * 			"dialplan" : yourDomainsDialplan,
+	 * 			"matchrule" : DialruleToDelete
+	 * 		}
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=dialrule&action=delete
+	 */
+	public function delete($form) {
+	
+		$this->nslog("debug", "(".$this->name.".delete) form " . print_r($form, true));
+	
+		if (!isset($form['dialplan']) && !isset($form['plan']))
+			return $this->errorResponse(400, "Need to include 'dialplan'");
+		
+		if (!isset($form['matchrule']) )
+			return $this->errorResponse(400, "Need to include 'matchrule'");
+
+		if (!isset($form['domain']) && $form['object']!="phonenumber"  )
+			return $this->errorResponse(400, "Need to include 'domain'");
+		
+		if ($form['object']=="phonenumber")
+			$form['domain'] ='admin-only';
+			
+		
+		
+		
+		if (!isset($form['dialplan']) && isset($form['plan']))
+			$form['dialplan'] = $form['plan'];
+		
+		
+		$form['id']=$form['matchrule'];
+		$this->addAuditlogInfo($form,$form['matchrule']);
+		$this->nslog("debug", "(".$this->name.".delete) nsDelete " . print_r($form, true));
+		if (!$this->Dialrule->nsDelete($form,  'dialplan_events', 'dialplan'))
+			return $this->errorResponse(400, "Failure from remote end");
+		else 
+			$this->nslog("debug", "(".$this->name.".delete) delte ok? " );
+			
+		$this->redirect(null, 200);
+	}
+	
+	public function eventCreate($event) {
+	
+		$this->nslog("debug", "(".$this->name.".eventCreate) event " . print_r($event, true));
+	
+		if (!isset($event['object'])) {
+		}
+		else if ($event['object']=='dialplan' && !isset($event['matchrule']) ) {
+			$this->Dialplan->nsCreateFromSbus($event);
+		}
+		
+	}
+	
+	public function eventUpdate($event) {
+	
+		$this->nslog("debug", "(".$this->name.".eventUpdate) event " . print_r($event, true));
+	
+		if (!isset($event['object'])) {
+		}
+		else if ($event['object']=='dialplan'&& !isset($event['matchrule'])) {
+			$this->Dialplan->nsUpdateFromSbus($event);
+		}
+		
+	}
+	
+	public function eventDelete($event) {
+	
+		$this->nslog("debug", "(".$this->name.".eventDelete) event " . print_r($event, true));
+	
+		if (!isset($event['object'])) {
+		}
+		else if ($event['object']=='dialplan'&& !isset($event['matchrule'])) {
+			$this->Dialplan->nsDeleteFromSbus($event);
+		}
+		
+	}
+	
+
+	
+
+	
+	
+}
+?>
+
+	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName docformeController
+	 * @apiGroup 
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object
+	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName docformeController
+	 * @apiGroup 
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object
+	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName docforme
+	 * @apiGroup 
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object
+	/**
+	 * @api {post} ?object=&action= 
+	 * @apiName docforme
+	 * @apiGroup 
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object
+	/**
+	 * @api {post} ?object=docforme&action=count Count docforme
+	 * @apiName Countdocforme
+	 * @apiGroup docforme
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object
