@@ -853,3 +853,13 @@ ass DialrulesController extends AppController {
 	 * @apiGroup docforme
 	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
 	 * @apiParam {String} object
+	/**
+	 * @api {post} ?object=docforme&action=count Count docforme
+	 * @apiName Countdocforme
+	 * @apiGroup docforme
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	/**
+	 * @api {post} ?object=docforme&action=count Count docforme
+	 * @apiName Countdocforme
+	 * @apiGroup docforme
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".

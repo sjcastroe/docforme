@@ -10,7 +10,7 @@ function getParam {
 }
 
 function getApiParams {
-#	parameters=()
+
 	count=0
 
 	while read line
@@ -19,19 +19,17 @@ function getApiParams {
 		do
 			parameter=$(getParam "$line")
 			if [ ${#paramsArray[@]} -eq 0 ]; then
-#			if [ ${#parameters[@]} -eq 0 ]; then
-#				parameters[$count]=$parameter
+
 				paramsArray[$count]=$parameter
 				count=$((count+1))
 			else
-#				for i in "${parameters[@]}"
+
 				for i in "${paramsArray[@]}"
 				do
 					if [ "$parameter" == $i ]; then
 						break
 					else
-#						if [ "${parameters[$count-1]}" == $i ]; then
-#							parameters[$count]=$parameter
+
 						if [ "${paramsArray[$count-1]}" == $i ]; then
 							paramsArray[$count]=$parameter
 							count=$((count+1))
@@ -42,24 +40,10 @@ function getApiParams {
 			line=${line#*form[\'}
 		done
 	done < $1
-
-	
-#	echo -e ${parameters[@]} 
 }
 
 function createDocBlock {
-#	beg=$1
-#	linenumber=$((beg-1))
-#	writerequest=$linenumber'ithis is a test'
-#	sed -i "$writerequest" $2
-	
-#	sergioarray=( "blah" "bleh" "blih" )
-#	params=""
-#	for i in "${sergioarray[@]}"
-#	do
-#		params=$params$i
-#		echo $params	
-#	done	
+
 	apiGroup=${1%Controller}
 	actionName=$2
 	objectName=$apiGroup
@@ -68,28 +52,27 @@ function createDocBlock {
 	apiName=$actionName$objectName
 	apiName="${apiName^}"
 
-	echo $apiGroup
-	echo $actionName
-	echo $objectName
-	echo $description
-	echo $apiName
-
-	echo -ne '	/**\n' >> $1
-	echo -ne '	 * @api {post} ?object='"$objectName"'&action='"$actionName"' '"$description"'\n' >> $1
-	echo -ne '	 * @apiName '"$apiName"'\n' >> $1
-	echo -ne '	 * @apiGroup '"$apiGroup"'\n' >> $1
-	echo -ne '	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".\n' >> $1
+	echo -ne '	/**\n' >> $3
+	echo -ne '	 * @api {post} ?object='"$objectName"'&action='"$actionName"' '"$description"'\n' >> $3
+	echo -ne '	 * @apiName '"$apiName"'\n' >> $3
+	echo -ne '	 * @apiGroup '"$apiGroup"'\n' >> $3
+	echo -ne '	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".\n' >> $3
 
 	for i in "${paramsArray[@]}"
 	do
-	echo -ne '	 * @apiParam {String} '"$i"'\n' >> $1
-	done 
+	echo -ne '	 * @apiParam {String} '"$i"'\n' >> $3
+	done
+	
+	echo -ne '	 * @apiPermission Reseller\n' >> $3
+	echo -ne '	 * @apiSampleRequest ?format=json&object='"$objectName"'&action='"$actionName"'\n' >> $3
+	echo -ne '	 */\n' >> $3
 }
 
 function main {
 	IFS=''
 	fnames=( "${@:2}" )
 	linenumber=1
+	docLocationsNo=0
 	functionName=""
 	beg="null"
 	end="null"
@@ -114,12 +97,27 @@ function main {
 		fi
 
 		if [ "$beg" != "null" -a "$end" != "null" ]; then
+			echo $beg
+			echo $end
+			
+			#docLocations[$docLocationsNo]=$beg
+			#docLocationsNo=$((docLocationsNo+1))
+			
 			copyrequest=$beg","$end"w dfmtemp"
 			sed -n "$copyrequest" $1
 			getApiParams dfmtemp
 			rm dfmtemp
-			createDocBlock $1 $functionName 
-			break
+			
+			tmpfile=$(mktemp dfmtemp)
+			createDocBlock $1 $functionName dfmtemp
+			
+			
+			insertlineno=$((beg-1))
+			sed -i "${insertlineno}r dfmtemp" docformetest2
+			
+			rm dfmtemp
+			beg="null"
+			end="null"
 		fi
 		linenumber=$((linenumber+1))
 	done < $1
@@ -129,6 +127,7 @@ readFile=docformetest
 #sed -n '1,2w docformetest2' docformetest
 
 paramsArray=()
+docLocations=()
 
 main "$@" 
 #params=$(getApiParams "$readFile")
