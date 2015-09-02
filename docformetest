@@ -1,0 +1,24 @@
+
+	/**
+	 * @api {post} ?object=docformetest&action=count Count docformetest
+	 * @apiName Countdocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=count
+	 */
+	public function count {
+		blah blah blah blah
+	}
+
+	/**
+	 * @api {post} ?object=docformetest&action=read Read docformetest
+	 * @apiName Readdocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=read
+	 */
+	public function read {
+		bleh bleh bleh
+	}

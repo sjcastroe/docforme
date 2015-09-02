@@ -24,13 +24,13 @@ function getApiParams {
 				count=$((count+1))
 			else
 
-				for i in "${paramsArray[@]}"
+				for j in "${paramsArray[@]}"
 				do
-					if [ "$parameter" == $i ]; then
+					if [ "$parameter" == $j ]; then
 						break
 					else
 
-						if [ "${paramsArray[$count-1]}" == $i ]; then
+						if [ "${paramsArray[$count-1]}" == $j ]; then
 							paramsArray[$count]=$parameter
 							count=$((count+1))
 						fi
@@ -44,13 +44,14 @@ function getApiParams {
 
 function createDocBlock {
 
-	apiGroup=${1%Controller}
+	apiGroup=${1%Controller*}
 	actionName=$2
 	objectName=$apiGroup
 	description=$actionName' '$objectName
 	description="${description^}"
 	apiName=$actionName$objectName
 	apiName="${apiName^}"
+	objectName="${objectName,,}"
 
 	echo -ne '	/**\n' >> $3
 	echo -ne '	 * @api {post} ?object='"$objectName"'&action='"$actionName"' '"$description"'\n' >> $3
@@ -71,69 +72,46 @@ function createDocBlock {
 function main {
 	IFS=''
 	fnames=( "${@:2}" )
-	linenumber=1
-	docLocationsNo=0
-	functionName=""
-	beg="null"
-	end="null"
-
-	while read line
-	do	
+	
+	for i in "${fnames[@]}"
+	do
+		linenumber=1
+		beg="null"
+		end="null"
 		
-		
-		for i in "${fnames[@]}"
+		while read line
 		do
 			if [[ $line == *"function "$i* ]]; then
-				functionName=$i
 				beg=$linenumber
+			fi
+			
+			if [ "$beg" != "null" ]; then
+				if [[ $line == "	}" ]]; then
+					end=$linenumber
+				fi
+			fi
+			
+			if [ "$beg" != "null" -a "$end" != "null" ]; then
+				copyrequest=$beg","$end"w dfmtemp"
+				sed -n "$copyrequest" $1
+				getApiParams dfmtemp
+				rm dfmtemp
+				
+				tmpfile=$(mktemp dfmtemp)
+				createDocBlock $1 $i dfmtemp
+			
+				insertlineno=$((beg-1))
+				sed -i "${insertlineno}r dfmtemp" $1
+			
+				rm dfmtemp
 				break
 			fi
-		done
-		
-		if [ "$beg" != "null" ]; then
-			if [[ $line == "	}" ]]; then
-				end=$linenumber
-			fi
-		fi
-
-		if [ "$beg" != "null" -a "$end" != "null" ]; then
-			echo $beg
-			echo $end
+			linenumber=$((linenumber+1))
 			
-			#docLocations[$docLocationsNo]=$beg
-			#docLocationsNo=$((docLocationsNo+1))
-			
-			copyrequest=$beg","$end"w dfmtemp"
-			sed -n "$copyrequest" $1
-			getApiParams dfmtemp
-			rm dfmtemp
-			
-			tmpfile=$(mktemp dfmtemp)
-			createDocBlock $1 $functionName dfmtemp
-			
-			
-			insertlineno=$((beg-1))
-			sed -i "${insertlineno}r dfmtemp" docformetest2
-			
-			rm dfmtemp
-			beg="null"
-			end="null"
-		fi
-		linenumber=$((linenumber+1))
-	done < $1
+		done < $1
+	done
 }
 
-readFile=docformetest
-#sed -n '1,2w docformetest2' docformetest
-
 paramsArray=()
-docLocations=()
 
-main "$@" 
-#params=$(getApiParams "$readFile")
-#main "$@"
-# cat > docformetest << EOF
-#	do some commands on "$var1"
-#
-#  and/or "$var2"
-# EOF
+main "$@"
