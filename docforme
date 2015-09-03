@@ -9,13 +9,20 @@ function getParam {
 	echo -e "$parameter"
 }
 
+function getSuccess {
+	success=$1
+	success=${success#*\'}
+	success=${success%%\'*}
+	echo -e "$success"
+}
+
 function getApiParams {
 
 	count=0
 
 	while read line
 	do		
-		while [[ $line ==  *"form["* ]] 
+		while [[ $line ==  *"form["* && $line != "//"* ]] 
 		do
 			parameter=$(getParam "$line")
 			if [ ${#paramsArray[@]} -eq 0 ]; then
@@ -42,6 +49,54 @@ function getApiParams {
 	done < $1
 }
 
+function getApiSuccess {
+	
+	count=0
+	
+	while read lineGAS
+	do
+		if [[ $lineGAS == *"=>"* && $lineGAS != "//"* ]]; then
+			success=$(getSuccess "$lineGAS")
+			successArray[$count]=$success
+			count=$((count+1))
+		fi
+	done < $1
+}
+
+function readModel {
+	directory=$(dirname $(dirname $(readlink -f $1)))"/Model"
+	mfilename=${1%Controller*}
+	mfilename=${mfilename%s}"."
+	mfile=$(find $directory -name "$mfilename*")
+	
+	linenumberRM=1
+	begRM="null"
+	endRM="null"
+	while read lineRM
+	do
+		if [[ $lineRM == *"schemaApiToDb"* ]]; then
+			begRM=$linenumberRM
+		fi
+		
+		if [ "$begRM" != "null" ]; then
+			if [[ $lineRM == *");"* ]]; then
+				endRM=$linenumberRM
+			fi
+		fi
+		
+		if [ "$begRM" != "null" -a "$endRM" != "null" ]; then
+			copyrequestRM=$begRM","$endRM"w dfmtemp"
+			sed -n "$copyrequestRM" $mfile
+			getApiSuccess dfmtemp
+			rm dfmtemp
+
+			break
+		fi
+		linenumberRM=$((linenumberRM+1))
+	done < $mfile
+
+}
+
 function createDocBlock {
 
 	apiGroup=${1%Controller*}
@@ -52,6 +107,7 @@ function createDocBlock {
 	apiName=$actionName$objectName
 	apiName="${apiName^}"
 	objectName="${objectName,,}"
+	objectName=${objectName%s}
 
 	echo -ne '	/**\n' >> $3
 	echo -ne '	 * @api {post} ?object='"$objectName"'&action='"$actionName"' '"$description"'\n' >> $3
@@ -59,10 +115,17 @@ function createDocBlock {
 	echo -ne '	 * @apiGroup '"$apiGroup"'\n' >> $3
 	echo -ne '	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".\n' >> $3
 
-	for i in "${paramsArray[@]}"
+	for j in "${paramsArray[@]}"
 	do
-	echo -ne '	 * @apiParam {String} '"$i"'\n' >> $3
+	echo -ne '	 * @apiParam {String} '"$j"'\n' >> $3
 	done
+	
+	if [[ "$actionName" == "read"* ]]; then
+	for j in "${successArray[@]}"
+	do
+	echo -ne '	 * @apiSuccess {String} '"$j"'\n' >> $3
+	done
+	fi
 	
 	echo -ne '	 * @apiPermission Reseller\n' >> $3
 	echo -ne '	 * @apiSampleRequest ?format=json&object='"$objectName"'&action='"$actionName"'\n' >> $3
@@ -97,6 +160,10 @@ function main {
 				getApiParams dfmtemp
 				rm dfmtemp
 				
+				if [[ $i == "read"* ]]; then
+					readModel $1
+				fi
+				
 				tmpfile=$(mktemp dfmtemp)
 				createDocBlock $1 $i dfmtemp
 			
@@ -113,5 +180,6 @@ function main {
 }
 
 paramsArray=()
+successArray=()
 
 main "$@"
