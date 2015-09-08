@@ -24,7 +24,7 @@ function getApiParams {
 	do		
 		while [[ $line ==  *"form["* && $line != "//"* ]] 
 		do
-			parameter=$(getParam "$line")
+			parameter="["$(getParam "$line")"]"
 			if [ ${#paramsArray[@]} -eq 0 ]; then
 
 				paramsArray[$count]=$parameter
@@ -61,6 +61,63 @@ function getApiSuccess {
 			count=$((count+1))
 		fi
 	done < $1
+}
+
+function setOptionalParams {
+
+	backwfile=$(tac $1)
+	echo -ne "$backwfile" >> backwardsfile
+
+	redirects=()
+	redirectsSize=0
+	linenumber=1
+	while read lineSOP
+	do
+		if [[ $lineSOP == *"redirect(null, 400)"* ]]; then
+			redirects[$redirectsSize]=$linenumber
+			redirectsSize=$((redirectsSize+1))
+		fi
+		linenumber=$((linenumber+1))
+	done < backwardsfile
+
+	
+	for g in "${redirects[@]}"
+	do
+		linenumber=1
+		readcode="off"
+		alloptional="false"
+		while read lineSOP
+		do
+			if [[ $linenumber == $g ]]; then
+				readcode="on"
+			fi
+			if [[ $readcode == "on" ]]; then
+
+				if [[ $lineSOP == *"else"*"if"* ]]; then
+					alloptional="true"
+				fi
+
+				if [[ $alloptional != "true" ]]; then
+						for ((h=0; h<${#paramsArray[@]}; h++));
+						do
+							paramcopy=${paramsArray[$h]#[}
+							paramcopy=${paramcopy%]}
+							if [[ $lineSOP == *"isset(\$form['"$paramcopy"'])"* ]]; then
+								paramsArray[$h]=$paramcopy
+							fi
+						done
+				fi
+
+				if [[ $lineSOP == *"if ("* && $lineSOP != *"else"* ]]; then
+					readcode="off"
+				fi
+			fi
+
+			linenumber=$((linenumber+1))
+		done < backwardsfile
+	done
+
+	rm backwardsfile
 }
 
 function readModel {
@@ -158,7 +215,10 @@ function main {
 				copyrequest=$beg","$end"w dfmtemp"
 				sed -n "$copyrequest" $1
 				getApiParams dfmtemp
+				setOptionalParams dfmtemp
 				rm dfmtemp
+
+
 				
 				if [[ $i == "read"* ]]; then
 					readModel $1
@@ -182,3 +242,9 @@ paramsArray=()
 successArray=()
 
 main "$@"
+
+#getApiParams $1
+
+#setOptionalParams $1
+
+#echo ${paramsArray[@]}

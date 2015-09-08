@@ -1,24 +1,559 @@
+<?php
 
+
+class SettingsController extends AppController {
+
+	public $uses = array('Uiconfig','Defaultvalue');
+	public $layout = 'api';
+
+	public function read($form) {
+	
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='uiconfig') {
+			$this->read_uiconfig($form);
+		}
+		else if ($form['object']=='images') {
+			$this->read_images($form);
+		}
+		else if ($form['object']=='config') {
+			$this->read_config($form);
+		}
+		else if ($form['object']=='defaultvalue') {
+			$this->read_defaults($form);
+		}
+	}
+	
+	public function create($form) {
+	
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='uiconfig') {
+			$this->create_uiconfig($form);
+		}
+		else
+			$this->redirect(null, 400);
+		
+	}
+	
+	public function update($form) {
+	
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='uiconfig') {
+			$this->update_uiconfig($form);
+		}
+		else
+			$this->redirect(null, 400);
+	
+	}
+	
+	public function delete($form) {
+	
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='uiconfig') {
+			$this->delete_uiconfig($form);
+		}
+		else
+			$this->redirect(null, 400);
+	
+	}
+	
+	/**
+	 * @api {post} ?object=uiconfig&action=read Read a UI Configuration
+	 * @apiName ReadUIConfig
+	 * @apiGroup UIConfig
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain		Domain of UI Configuration to be read.
+	 * @apiParam {String} config_name	Name of UI Configuration to be read. For a full list of UI Configuration settings, use PORTAL_*
+	 * @apiParam {String} [user]		User name used to filter search.
+	 * @apiParam {String} [role]		Role of UI Configuration used to filter search.
+	 * @apiParam {String} [login_type]	Login/Account access type used to filter search.
+	 * @apiSuccess {String} config_name		Name of UI Configuration.
+	 * @apiSuccess {String} config_value	Value of UI Configuration.
+	 * @apiSuccess {String} description		Description of UI Configuration.
+	 * @apiSuccess {String} domain			Domain of UI Configuration.
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=uiconfig&action=read
+	 */
+	public function read_uiconfig($form) {
+		
+		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
+		
+		if (isset($form['config_name'])) {
+			
+		}
+		else 
+			$this->redirect(null, 400);
+		
+		if (!isset($form['domain'])) 
+			$form['domain'] ="*";
+		if (!isset($form['user']))
+			$form['user'] ="*";
+		if (!isset($form['role']))
+			$form['role'] ="*";
+		if (!isset($form['login_type'])) 
+			$form['login_type'] ="*";
+
+		
+		if (strpos($form['config_name'], "*") === false) {
+			$single = true;
+		} else {
+			$single = false;
+			
+		}
+		
+		
+		if ($single) {
+			$query['conditions']['config_name'] = $form['config_name'];
+		} else {
+			$query['conditions']['config_name LIKE'] = str_replace('*','%',$form['config_name']);
+		}
+		
+		
+		$i=-1;
+		
+		
+		if ($form['domain']!="*")
+		{
+			$i++;
+			$query['conditions']['AND'][$i]['OR'][0]['domain'] = $form['domain'];
+			$query['conditions']['AND'][$i]['OR'][1]['domain'] = "*";
+		}
+		else
+			$query['conditions']['domain'] =$form['domain'];
+		
+		
+		if ($form['user']!="*")
+		{
+			$i++;
+			$query['conditions']['AND'][$i]['OR'][0]['user'] = $form['user'];
+			$query['conditions']['AND'][$i]['OR'][1]['user'] = "*";
+		}
+		else
+			$query['conditions']['user'] =$form['user'];
+		
+		
+		if ($form['role']!="*"  )
+		{
+			$i++;
+			$query['conditions']['AND'][$i]['OR'][0]['role'] = $form['role'];
+			$query['conditions']['AND'][$i]['OR'][1]['role'] = "*";
+			
+			if (!isset($form['login_type']) || $form['login_type'] == "*" )
+			{
+				if ($form['role']=="Office Manager")
+					$form['login_type']="Domain";
+				elseif ($form['role']=="Basic User")
+					$form['login_type']="Subscriber";
+				elseif ($form['role']=="Basic User")
+					$form['login_type']="Reseller";
+			}
+			
+			
+		}
+		else
+			$query['conditions']['role'] =$form['role'];
+		
+		if ($form['login_type']!="*")
+		{
+			$i++;
+			$query['conditions']['AND'][$i]['OR'][0]['login_type'] = $form['login_type'];
+			$query['conditions']['AND'][$i]['OR'][1]['login_type'] = "*";
+		}
+		else
+			$query['conditions']['login_type'] =$form['login_type'];
+		
+		$query['order']['login_type'] = 'DESC';
+		$query['order']['domain'] = 'DESC';
+		$query['order']['user'] = 'DESC';
+		$query['order']['role'] = 'DESC';
+		
+		$query['fields'][0]='DISTINCT config_name';
+		$query['fields'][1]='config_value';
+		$query['fields'][2]='description';
+		$query['fields'][3]='domain';
+		
+		
+		
+		//$this->nslog('debug', '(read_ui_config $query)' . print_r($query, true));
+
+		//if($single)
+		//	$this->set('results', $this->Uiconfig->find('first', $query));
+		//else
+		//{
+			$results = $this->Uiconfig->find('all', $query);
+			$pPosts['xml']['uiconfig'] = array();
+			$used = array();
+			foreach ($results as $result) {
+				if (in_array( $result['Uiconfig']['config_name'], $used))
+					continue;
+				$used[$result['Uiconfig']['config_name']]= $result['Uiconfig']['config_name'];
+				$pPosts['xml']['uiconfig'][] = $result['Uiconfig'];
+			}
+			
+			$this->set('results', $pPosts);
+		//}
+		
+		
+		
+	}
+	
 	/**
 	 * @api {post} ?object=docformetest&action=count Count docformetest
 	 * @apiName Countdocformetest
 	 * @apiGroup docformetest
 	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} object
 	 * @apiPermission Reseller
 	 * @apiSampleRequest ?format=json&object=docformetest&action=count
 	 */
-	public function count {
-		blah blah blah blah
+	public function count($form) {
+		
+		$this->nslog('debug', '(count)' . print_r($form, true));
+		
+		if (!isset($form['object'])) {
+			$this->redirect(null, 400);
+		}
+		else if ($form['object']=='uiconfig') {
+			$this->count_uiconfig($form);
+		}
+		
 	}
-
+	
 	/**
-	 * @api {post} ?object=docformetest&action=read Read docformetest
-	 * @apiName Readdocformetest
+	 * @api {post} ?object=docformetest&action=count_uiconfig Count_uiconfig docformetest
+	 * @apiName Count_uiconfigdocformetest
 	 * @apiGroup docformetest
 	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} config_name
+	 * @apiParam {String} [domain]
+	 * @apiParam {String} [user]
+	 * @apiParam {String} [role]
+	 * @apiParam {String} [login_type]
+	 * @apiParam {String} [id]
 	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=read
+	 * @apiSampleRequest ?format=json&object=docformetest&action=count_uiconfig
 	 */
-	public function read {
-		bleh bleh bleh
+	public function count_uiconfig($form) {
+	
+		$this->nslog('debug', '(count_uiconfig)' . print_r($form, true));
+	
+		if (isset($form['config_name'])) {
+				
+		}
+		else
+			$this->redirect(null, 400);
+	
+		if (!isset($form['domain']))
+			$form['domain'] ="*";
+		if (!isset($form['user']))
+			$form['user'] ="*";
+		if (!isset($form['role']))
+			$form['role'] ="*";
+		if (!isset($form['login_type']))
+			$form['login_type'] ="*";
+	
+	
+		if (strpos($form['config_name'], "*") === false) {
+			$single = true;
+		} else {
+			$single = false;
+				
+		}
+	
+	
+		if ($single) {
+			$query['conditions']['config_name'] = $form['config_name'];
+		} else {
+			$query['conditions']['config_name LIKE'] = str_replace('*','%',$form['config_name']);
+		}
+	
+	
+		$i=-1;
+	
+	
+		$query['conditions']['domain'] =$form['domain'];
+	
+	
+		$query['conditions']['user'] =$form['user'];
+	
+	
+		$query['conditions']['role'] =$form['role'];
+	
+		$query['conditions']['login_type'] =$form['login_type'];
+	
+// 		$query['order']['login_type'] = 'DESC';
+// 		$query['order']['domain'] = 'DESC';
+// 		$query['order']['user'] = 'DESC';
+// 		$query['order']['role'] = 'DESC';
+	
+// 		$query['fields'][0]='DISTINCT config_name';
+// 		$query['fields'][1]='config_value';
+// 		$query['fields'][2]='description';
+// 		$query['fields'][3]='domain';
+	
+	
+	
+		$this->nslog('debug', '(count_uiconfig query)' . print_r($query, true));
+		$posts = $this->Uiconfig->find('count', $query);
+		$this->nslog('debug', '(count_uiconfig posts)' . print_r($posts, true));
+		$pPosts['xml']['total'] = $posts;
+		$this->nslog('debug', '(count_uiconfig posts)' . print_r($pPosts, true));
+		$this->set('results', $pPosts);
+		
+		
+// 		$pPosts['xml']['uiconfig'] = array();
+// 		$used = array();
+// 		foreach ($results as $result) {
+// 			if (in_array( $result['Uiconfig']['config_name'], $used))
+// 				continue;
+// 			$used[$result['Uiconfig']['config_name']]= $result['Uiconfig']['config_name'];
+// 			$pPosts['xml']['uiconfig'][] = $result['Uiconfig'];
+// 		}
+			
+// 		$this->set('results', $pPosts);
+		//}
+	
+	
+	
+		}
+	
+	/**
+	 * @api {post} ?object=uiconfig&action=create Create a UI Configuration
+	 * @apiName CreateUIConfig
+	 * @apiGroup UIConfig
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} domain		Domain where UI config will be created.
+	 * @apiParam {String} config_name	Name of UI Configuration to be created.
+	 * @apiParam {String} [user]		User name.
+	 * @apiParam {String} [role]		Role in charge of UI Configuration.
+	 * @apiParam {String} [login_type]	Login/Access type for UI Configuration.
+	 * @apiParam {String} [config_value]UI Configuration value.
+	 * @apiParam {String} [description]	Description for UI Configuration.
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=uiconfig&action=create
+	 */
+	public function create_uiconfig($form) {
+	
+		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
+	
+		if (isset($form['config_name'])) {
+		}
+		else
+			$this->redirect(null, 400);
+	
+		if (!isset($form['domain']))
+			$form['domain'] ="*";
+		if (!isset($form['user']))
+			$form['user'] ="*";	
+		if (!isset($form['role']))
+			$form['role'] ="*";
+		if (!isset($form['login_type']))
+			$form['login_type'] ="*";
+	
+	
+	
+		$form['id']=$form['config_name'];
+		
+		if (!$this->Uiconfig->nsCreate($form,  'config_events', 'uiconfig'))
+			return $this->errorResponse(400, "Failure from remote end");
+			
+		$this->redirect(null, 200);
 	}
+	
+	/**
+	 * @api {post} ?object=uiconfig&action=update Update a UI Configuration
+	 * @apiName UpdateUIConfig
+	 * @apiGroup UIConfig
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+     * @apiParam {String} domain		Domain of UI Configuration to update. 
+	 * @apiParam {String} config_name	Identifies UI Configuration to update by its config name. If a UI config with the specified config name does not exist, it will created.
+	 * @apiParam {String} [user]		Identifies UI Configuration to update by user name. If a UI config with the specified user name does not exist, it will created.
+	 * @apiParam {String} [role]		Identifies UI Configuration to update by role. If a UI config with the specified role does not exist, it will created.
+	 * @apiParam {String} [login_type]	Identifies UI Configuration to update by login/access type. If a UI config with the specified login/access type does not exist, it will created.
+	 * @apiParam {String} [config_value]New value of UI Configuration.
+	 * @apiParam {String} [description]	New description for UI Configuration.
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=uiconfig&action=update
+	 */
+	public function update_uiconfig($form) {
+	
+		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
+	
+		if (isset($form['config_name'])) {
+		}
+		else
+			$this->redirect(null, 400);
+	
+		if (!isset($form['domain']))
+			$form['domain'] ="*";
+		if (!isset($form['user']))
+			$form['user'] ="*";
+		if (!isset($form['role']))
+			$form['role'] ="*";
+		if (!isset($form['login_type']))
+			$form['login_type'] ="*";
+	
+	
+	
+		$form['id']=$form['config_name'];
+	
+		if (!$this->Uiconfig->nsUpdate($form,  'config_events', 'uiconfig'))
+			return $this->errorResponse(400, "Failure from remote end");
+			
+		$this->redirect(null, 200);
+	
+	
+	
+	}
+	
+	/**
+	 * @api {post} ?object=docformetest&action=delete_uiconfig Delete_uiconfig docformetest
+	 * @apiName Delete_uiconfigdocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} config_name
+	 * @apiParam {String} [domain]
+	 * @apiParam {String} [user]
+	 * @apiParam {String} [role]
+	 * @apiParam {String} [login_type]
+	 * @apiParam {String} [id]
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=delete_uiconfig
+	 */
+	public function delete_uiconfig($form) {
+	
+		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
+	
+		if (isset($form['config_name'])) {
+		}
+		else
+			$this->redirect(null, 400);
+	
+		if (!isset($form['domain']))
+			$form['domain'] ="*";
+		if (!isset($form['user']))
+			$form['user'] ="*";
+		if (!isset($form['role']))
+			$form['role'] ="*";
+		if (!isset($form['login_type']))
+			$form['login_type'] ="*";
+	
+	
+	
+		$form['id']=$form['config_name'];
+	
+		if (!$this->Uiconfig->nsDelete($form,  'config_events', 'uiconfig'))
+			return $this->errorResponse(400, "Failure from remote end");
+			
+		$this->redirect(null, 200);
+	
+	
+	
+	}
+	
+	public function read_defaults($form) {
+	
+		$this->nslog('debug', '(read_defaults)' . print_r($form, true));
+	
+		if (isset($form['table_name'])) {
+		}
+		else
+			$this->redirect(null, 400);
+		
+	
+		if (!isset($form['domain']))
+			$form['domain'] ="*";
+		
+	
+	
+		$query['conditions']['table_name'] = $form['table_name'];
+	
+	
+		$i=-1;
+	
+	
+		if ($form['domain']!="*")
+		{
+			$i++;
+			$query['conditions']['AND'][$i]['OR'][0]['domain'] = $form['domain'];
+			$query['conditions']['AND'][$i]['OR'][1]['domain'] = "*";
+		}
+		else
+			$query['conditions']['domain'] =$form['domain'];
+
+	
+		$query['order']['field_name'] = 'DESC';
+		$query['order']['domain'] = 'DESC';
+		
+		$query['fields'][0]='DISTINCT field_name';
+		$query['fields'][1]='domain';
+		$query['fields'][2]='default_value';
+	
+	
+		$results = $this->Defaultvalue->find('all', $query);
+		//$pPosts = array();
+		$used = array();
+		$pPosts['xml']['defaultvalue']= array();
+		foreach ($results as $result) {
+			if (in_array( $result['Defaultvalue']['field_name'], $used))
+				continue;
+			$used[$result['Defaultvalue']['field_name']]= $result['Defaultvalue']['field_name'];
+			$pPosts['xml']['defaultvalue'][] = $result['Defaultvalue'];
+		}
+			
+		$this->set('results', $pPosts);
+		//}
+	
+	
+	
+		}
+		
+		public function eventCreate($event) {
+			$this->nslog("debug", "(".$this->name.".eventCreate) event " . print_r($event, true));
+			if (!isset($event['object'])) {
+				
+			}
+			else if ($event['object']=='uiconfig') {
+				$this->Uiconfig->nsCreateFromSbus($event);
+			}
+			
+			return true;
+		}
+		
+		public function eventUpdate($event) {
+		
+			$this->nslog("debug", "(".$this->name.".eventUpdate) event " . print_r($event, true));
+		
+			if (!isset($event['object'])) {
+				
+			}
+			else if ($event['object']=='uiconfig') {
+				$this->Uiconfig->nsUpdateFromSbus($event);
+			}
+		}
+		
+		public function eventDelete($event) {
+		
+			$this->nslog("debug", "(".$this->name.".eventDelete) event " . print_r($event, true));
+		
+			if (!isset($event['object'])) {
+				
+			}
+			else if ($event['object']=='uiconfig') {
+				$this->Uiconfig->nsDeleteFromSbus($event);
+			}
+		}
+
+	
+
+	
+	
+}
+?>
