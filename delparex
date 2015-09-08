@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#This will delete all '@apiParamExample blocks from a file
+
+function main {	
+	while grep -q "@apiParamExample" $1
+	do
+		linenumber=1
+		beg="null"
+		end="null"
+		while read line
+		do
+			if [[ $line == *"@apiParamExample"* ]]; then
+				beg=$linenumber
+			fi
+			
+			if [ "$beg" != "null" ]; then
+				if [[ $line == *"*"*"}"* && $line != *"@"* ]]; then
+					end=$linenumber
+				fi
+			fi
+			
+			if [ "$beg" != "null" -a "$end" != "null" ]; then
+				sed -i "${beg},${end}d" $1
+				break
+			fi
+			linenumber=$((linenumber+1))
+		
+		done < $1
+	done
+}
+
+main $1
