@@ -155,7 +155,6 @@ function readModel {
 }
 
 function createDocBlock {
-
 	apiGroup=${1%Controller*}
 	actionName=$2
 	objectName=$apiGroup
@@ -192,12 +191,14 @@ function createDocBlock {
 function main {
 	IFS=''
 	fnames=( "${@:2}" )
+	numberoflines=$(wc -l < $1)
 	
 	for i in "${fnames[@]}"
 	do
 		linenumber=1
 		beg="null"
 		end="null"
+		functionfound="false"
 		
 		while read line
 		do
@@ -206,12 +207,16 @@ function main {
 			fi
 			
 			if [ "$beg" != "null" ]; then
-				if [[ $line == "	}" ]]; then
+				linenowhitespace="$(echo -ne "${line}" | tr -d '[[:space:]]')"
+				if [[ $linenowhitespace == "}" ]]; then
 					end=$linenumber
 				fi
+				if [[ ($line == *"function"* || $linenumber -eq $numberoflines) && $end != "null" ]]; then
+					functionfound="true"
+				fi
 			fi
-			
-			if [ "$beg" != "null" -a "$end" != "null" ]; then
+		
+			if [ $functionfound == "true" ]; then
 				copyrequest=$beg","$end"w dfmtemp"
 				sed -n "$copyrequest" $1
 				getApiParams dfmtemp
@@ -242,9 +247,3 @@ paramsArray=()
 successArray=()
 
 main "$@"
-
-#getApiParams $1
-
-#setOptionalParams $1
-
-#echo ${paramsArray[@]}

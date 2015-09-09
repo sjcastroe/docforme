@@ -458,6 +458,16 @@ class SettingsController extends AppController {
 	
 	}
 	
+	/**
+	 * @api {post} ?object=docformetest&action=read_defaults Read_defaults docformetest
+	 * @apiName Read_defaultsdocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} table_name
+	 * @apiParam {String} [domain]
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=read_defaults
+	 */
 	public function read_defaults($form) {
 	
 		$this->nslog('debug', '(read_defaults)' . print_r($form, true));
@@ -527,6 +537,14 @@ class SettingsController extends AppController {
 			return true;
 		}
 		
+	/**
+	 * @api {post} ?object=docformetest&action=eventUpdate EventUpdate docformetest
+	 * @apiName EventUpdatedocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=eventUpdate
+	 */
 		public function eventUpdate($event) {
 		
 			$this->nslog("debug", "(".$this->name.".eventUpdate) event " . print_r($event, true));
@@ -539,6 +557,14 @@ class SettingsController extends AppController {
 			}
 		}
 		
+	/**
+	 * @api {post} ?object=docformetest&action=eventDelete EventDelete docformetest
+	 * @apiName EventDeletedocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=eventDelete
+	 */
 		public function eventDelete($event) {
 		
 			$this->nslog("debug", "(".$this->name.".eventDelete) event " . print_r($event, true));
