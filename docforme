@@ -73,6 +73,7 @@ function setOptionalParams {
 	linenumber=1
 	while read lineSOP
 	do
+
 		if [[ $lineSOP == *"redirect(null, 400)"* ]]; then
 			redirects[$redirectsSize]=$linenumber
 			redirectsSize=$((redirectsSize+1))
@@ -86,12 +87,25 @@ function setOptionalParams {
 		linenumber=1
 		readcode="off"
 		alloptional="false"
+		bracketlevel=0
+		redirectbracketlvl=0
 		while read lineSOP
 		do
+			if [[ $lineSOP == *"}"* ]]; then
+				bracketlevel=$((bracketlevel+1))
+			fi
 			if [[ $linenumber == $g ]]; then
 				readcode="on"
+				redirectbracketlvl=$((bracketlevel-1))
 			fi
 			if [[ $readcode == "on" ]]; then
+
+				#check if redirect is in a single line conditional statement
+				if [[ $linenumber -eq $((g+1)) ]]; then
+					if [[ $lineSOP == *"else"* || $lineSOP == *"if"* ]]; then
+						redirectbracketlvl=$((redirectbracketlvl+1))
+					fi
+				fi
 
 				if [[ $lineSOP == *"else"*"if"* ]]; then
 					alloptional="true"
@@ -108,9 +122,13 @@ function setOptionalParams {
 						done
 				fi
 
-				if [[ $lineSOP == *"if ("* && $lineSOP != *"else"* ]]; then
+				if [[ $lineSOP == *"if ("* && $lineSOP != *"else"* && $bracketlevel -eq $redirectbracketlvl ]]; then
 					readcode="off"
 				fi
+			fi
+
+			if [[ $lineSOP == *"{"* ]]; then
+				bracketlevel=$((bracketlevel-1))
 			fi
 
 			linenumber=$((linenumber+1))
@@ -199,21 +217,16 @@ function main {
 		beg="null"
 		end="null"
 		functionfound="false"
+		mbracketlevel=0
 		
 		while read line
 		do
+			if [[ $line == *"{"* ]]; then
+				mbracketlevel=$((mbracketlevel+1))
+			fi
+
 			if [[ $line == *"function "$i* ]]; then
 				beg=$linenumber
-			fi
-			
-			if [ "$beg" != "null" ]; then
-				linenowhitespace="$(echo -ne "${line}" | tr -d '[[:space:]]')"
-				if [[ $linenowhitespace == "}" ]]; then
-					end=$linenumber
-				fi
-				if [[ ($line == *"function"* || $linenumber -eq $numberoflines) && $end != "null" ]]; then
-					functionfound="true"
-				fi
 			fi
 		
 			if [ $functionfound == "true" ]; then
@@ -223,8 +236,6 @@ function main {
 				setOptionalParams dfmtemp
 				rm dfmtemp
 
-
-				
 				if [[ $i == "read"* ]]; then
 					readModel $1
 				fi
@@ -236,6 +247,15 @@ function main {
 			
 				rm dfmtemp
 				break
+			fi
+
+			if [[ $line == *"}"* ]]; then
+				mbracketlevel=$((mbracketlevel-1))
+
+				if [[ "$beg" != "null" && $mbracketlevel -eq 1 ]]; then
+					functionfound="true"
+					end=$linenumber
+				fi
 			fi
 			linenumber=$((linenumber+1))
 			

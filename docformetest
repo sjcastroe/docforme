@@ -1,584 +1,578 @@
 <?php
 
+class ConnectionsController extends AppController {
 
-class SettingsController extends AppController {
-
-	public $uses = array('Uiconfig','Defaultvalue');
+	public $uses = array('Connection','Domain','Subscriber');
 	public $layout = 'api';
 
-	public function read($form) {
-	
-		if (!isset($form['object'])) {
-			$this->redirect(null, 400);
-		}
-		else if ($form['object']=='uiconfig') {
-			$this->read_uiconfig($form);
-		}
-		else if ($form['object']=='images') {
-			$this->read_images($form);
-		}
-		else if ($form['object']=='config') {
-			$this->read_config($form);
-		}
-		else if ($form['object']=='defaultvalue') {
-			$this->read_defaults($form);
-		}
+	public function __GetPagintaion($form)
+	{
+		$conditions = array();
+		if (isset($form['start']))
+			$conditions['start'] = $form['start'];
+		if (isset($form['limit']))
+			$conditions['limit'] = $form['limit'];
+		if (isset($form['sort']))
+			$conditions['sort'] = $form['sort'];
+		return $conditions;
 	}
 	
-	public function create($form) {
-	
-		if (!isset($form['object'])) {
-			$this->redirect(null, 400);
-		}
-		else if ($form['object']=='uiconfig') {
-			$this->create_uiconfig($form);
-		}
-		else
-			$this->redirect(null, 400);
+	public function __GetResellerConditions($conditions,$form)
+	{
 		
-	}
-	
-	public function update($form) {
-	
-		if (!isset($form['object'])) {
-			$this->redirect(null, 400);
-		}
-		else if ($form['object']=='uiconfig') {
-			$this->update_uiconfig($form);
-		}
+		
+		$sql="SELECT gateway_config . * , domains_config.domain AS domain_owner, domains_config.description AS domain_description 
+		FROM gateway_config, domains_config
+		WHERE (
+		
+				domains_config.`domain` = gateway_config.`domain`
+				
+		)
+		AND domains_config.`territory` = '".$this->NsStringEscape($form['territory'])."'";
+		
+		if (isset($form['description']))
+			$sql.= " AND gateway_config.`description` LIKE '".$this->NsStringEscape($form['description'])."'";
+		if (isset($form['address']))
+			$sql.= " AND gateway_config.`address` LIKE '%".$this->NsStringEscape($form['address'])."%'";
+		
+		if (isset($form['routechain']) && $form['routechain'] =="yes")
+			$sql.= " AND address LIKE '<%>' ";
+		else if (isset($form['routechain']) && $form['routechain'] =="no")
+			$sql.= " AND address NOT LIKE '<%>' ";
+		
+		if (isset($form['role']) )
+			$sql.= " AND role = '".$form['role']."' ";
+		
+		$sql.= " ORDER BY `gateway_config`.`aor` ASC ";
+		if (isset($form['start']) && isset($form['limit']))
+			$sql .=" LIMIT ".$this->NsStringEscape($form['start']).",".$this->NsStringEscape($form['limit']);
+		elseif (isset($form['limit']))
+			$sql .=" LIMIT ".$this->NsStringEscape($form['limit']);
 		else
-			$this->redirect(null, 400);
-	
-	}
-	
-	public function delete($form) {
-	
-		if (!isset($form['object'])) {
-			$this->redirect(null, 400);
-		}
-		else if ($form['object']=='uiconfig') {
-			$this->delete_uiconfig($form);
-		}
-		else
-			$this->redirect(null, 400);
-	
+			$sql .=" LIMIT 1000";
+		$this->nslog("debug", "(".$this->name.".read) sql " . print_r($sql, true));
+		return $sql;
 	}
 	
 	/**
-	 * @api {post} ?object=uiconfig&action=read Read a UI Configuration
-	 * @apiName ReadUIConfig
-	 * @apiGroup UIConfig
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiParam {String} domain		Domain of UI Configuration to be read.
-	 * @apiParam {String} config_name	Name of UI Configuration to be read. For a full list of UI Configuration settings, use PORTAL_*
-	 * @apiParam {String} [user]		User name used to filter search.
-	 * @apiParam {String} [role]		Role of UI Configuration used to filter search.
-	 * @apiParam {String} [login_type]	Login/Account access type used to filter search.
-	 * @apiSuccess {String} config_name		Name of UI Configuration.
-	 * @apiSuccess {String} config_value	Value of UI Configuration.
-	 * @apiSuccess {String} description		Description of UI Configuration.
-	 * @apiSuccess {String} domain			Domain of UI Configuration.
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=uiconfig&action=read
-	 */
-	public function read_uiconfig($form) {
-		
-		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
-		
-		if (isset($form['config_name'])) {
-			
-		}
-		else 
-			$this->redirect(null, 400);
-		
-		if (!isset($form['domain'])) 
-			$form['domain'] ="*";
-		if (!isset($form['user']))
-			$form['user'] ="*";
-		if (!isset($form['role']))
-			$form['role'] ="*";
-		if (!isset($form['login_type'])) 
-			$form['login_type'] ="*";
-
-		
-		if (strpos($form['config_name'], "*") === false) {
-			$single = true;
-		} else {
-			$single = false;
-			
-		}
-		
-		
-		if ($single) {
-			$query['conditions']['config_name'] = $form['config_name'];
-		} else {
-			$query['conditions']['config_name LIKE'] = str_replace('*','%',$form['config_name']);
-		}
-		
-		
-		$i=-1;
-		
-		
-		if ($form['domain']!="*")
-		{
-			$i++;
-			$query['conditions']['AND'][$i]['OR'][0]['domain'] = $form['domain'];
-			$query['conditions']['AND'][$i]['OR'][1]['domain'] = "*";
-		}
-		else
-			$query['conditions']['domain'] =$form['domain'];
-		
-		
-		if ($form['user']!="*")
-		{
-			$i++;
-			$query['conditions']['AND'][$i]['OR'][0]['user'] = $form['user'];
-			$query['conditions']['AND'][$i]['OR'][1]['user'] = "*";
-		}
-		else
-			$query['conditions']['user'] =$form['user'];
-		
-		
-		if ($form['role']!="*"  )
-		{
-			$i++;
-			$query['conditions']['AND'][$i]['OR'][0]['role'] = $form['role'];
-			$query['conditions']['AND'][$i]['OR'][1]['role'] = "*";
-			
-			if (!isset($form['login_type']) || $form['login_type'] == "*" )
-			{
-				if ($form['role']=="Office Manager")
-					$form['login_type']="Domain";
-				elseif ($form['role']=="Basic User")
-					$form['login_type']="Subscriber";
-				elseif ($form['role']=="Basic User")
-					$form['login_type']="Reseller";
-			}
-			
-			
-		}
-		else
-			$query['conditions']['role'] =$form['role'];
-		
-		if ($form['login_type']!="*")
-		{
-			$i++;
-			$query['conditions']['AND'][$i]['OR'][0]['login_type'] = $form['login_type'];
-			$query['conditions']['AND'][$i]['OR'][1]['login_type'] = "*";
-		}
-		else
-			$query['conditions']['login_type'] =$form['login_type'];
-		
-		$query['order']['login_type'] = 'DESC';
-		$query['order']['domain'] = 'DESC';
-		$query['order']['user'] = 'DESC';
-		$query['order']['role'] = 'DESC';
-		
-		$query['fields'][0]='DISTINCT config_name';
-		$query['fields'][1]='config_value';
-		$query['fields'][2]='description';
-		$query['fields'][3]='domain';
-		
-		
-		
-		//$this->nslog('debug', '(read_ui_config $query)' . print_r($query, true));
-
-		//if($single)
-		//	$this->set('results', $this->Uiconfig->find('first', $query));
-		//else
-		//{
-			$results = $this->Uiconfig->find('all', $query);
-			$pPosts['xml']['uiconfig'] = array();
-			$used = array();
-			foreach ($results as $result) {
-				if (in_array( $result['Uiconfig']['config_name'], $used))
-					continue;
-				$used[$result['Uiconfig']['config_name']]= $result['Uiconfig']['config_name'];
-				$pPosts['xml']['uiconfig'][] = $result['Uiconfig'];
-			}
-			
-			$this->set('results', $pPosts);
-		//}
-		
-		
-		
-	}
-	
-	/**
-	 * @api {post} ?object=docformetest&action=count Count docformetest
-	 * @apiName Countdocformetest
-	 * @apiGroup docformetest
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiParam {String} object
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=count
+	 * @api {post} ?object=connection&action=count Count Connections
+	 * @apiGroup Connection
+	 * @apiName CountConnections
+	 * @apiDescription "Takes in either aor, termination_match, domain, or territory"
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN"
+	 * @apiParam {String} [aor] AOR
+	 * @apiParam {String} [termination_match] termination_match
+	 * @apiParam {String} [domain] Domain
+	 * @apiParam {String} [territory] territory
+	 * @apiSuccess {String} output Will state the total connections under these parameters
+	 * 
 	 */
 	public function count($form) {
-		
-		$this->nslog('debug', '(count)' . print_r($form, true));
-		
-		if (!isset($form['object'])) {
-			$this->redirect(null, 400);
-		}
-		else if ($form['object']=='uiconfig') {
-			$this->count_uiconfig($form);
-		}
-		
-	}
 	
-	/**
-	 * @api {post} ?object=docformetest&action=count_uiconfig Count_uiconfig docformetest
-	 * @apiName Count_uiconfigdocformetest
-	 * @apiGroup docformetest
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiParam {String} config_name
-	 * @apiParam {String} [domain]
-	 * @apiParam {String} [user]
-	 * @apiParam {String} [role]
-	 * @apiParam {String} [login_type]
-	 * @apiParam {String} [id]
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=count_uiconfig
-	 */
-	public function count_uiconfig($form) {
-	
-		$this->nslog('debug', '(count_uiconfig)' . print_r($form, true));
-	
-		if (isset($form['config_name'])) {
-				
-		}
-		else
-			$this->redirect(null, 400);
-	
-		if (!isset($form['domain']))
-			$form['domain'] ="*";
-		if (!isset($form['user']))
-			$form['user'] ="*";
-		if (!isset($form['role']))
-			$form['role'] ="*";
-		if (!isset($form['login_type']))
-			$form['login_type'] ="*";
-	
-	
-		if (strpos($form['config_name'], "*") === false) {
-			$single = true;
-		} else {
-			$single = false;
-				
-		}
-	
-	
-		if ($single) {
-			$query['conditions']['config_name'] = $form['config_name'];
-		} else {
-			$query['conditions']['config_name LIKE'] = str_replace('*','%',$form['config_name']);
-		}
-	
-	
-		$i=-1;
-	
-	
-		$query['conditions']['domain'] =$form['domain'];
-	
-	
-		$query['conditions']['user'] =$form['user'];
-	
-	
-		$query['conditions']['role'] =$form['role'];
-	
-		$query['conditions']['login_type'] =$form['login_type'];
-	
-// 		$query['order']['login_type'] = 'DESC';
-// 		$query['order']['domain'] = 'DESC';
-// 		$query['order']['user'] = 'DESC';
-// 		$query['order']['role'] = 'DESC';
-	
-// 		$query['fields'][0]='DISTINCT config_name';
-// 		$query['fields'][1]='config_value';
-// 		$query['fields'][2]='description';
-// 		$query['fields'][3]='domain';
-	
-	
-	
-		$this->nslog('debug', '(count_uiconfig query)' . print_r($query, true));
-		$posts = $this->Uiconfig->find('count', $query);
-		$this->nslog('debug', '(count_uiconfig posts)' . print_r($posts, true));
-		$pPosts['xml']['total'] = $posts;
-		$this->nslog('debug', '(count_uiconfig posts)' . print_r($pPosts, true));
-		$this->set('results', $pPosts);
-		
-		
-// 		$pPosts['xml']['uiconfig'] = array();
-// 		$used = array();
-// 		foreach ($results as $result) {
-// 			if (in_array( $result['Uiconfig']['config_name'], $used))
-// 				continue;
-// 			$used[$result['Uiconfig']['config_name']]= $result['Uiconfig']['config_name'];
-// 			$pPosts['xml']['uiconfig'][] = $result['Uiconfig'];
-// 		}
-			
-// 		$this->set('results', $pPosts);
-		//}
-	
-	
-	
-		}
-	
-	/**
-	 * @api {post} ?object=uiconfig&action=create Create a UI Configuration
-	 * @apiName CreateUIConfig
-	 * @apiGroup UIConfig
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiParam {String} domain		Domain where UI config will be created.
-	 * @apiParam {String} config_name	Name of UI Configuration to be created.
-	 * @apiParam {String} [user]		User name.
-	 * @apiParam {String} [role]		Role in charge of UI Configuration.
-	 * @apiParam {String} [login_type]	Login/Access type for UI Configuration.
-	 * @apiParam {String} [config_value]UI Configuration value.
-	 * @apiParam {String} [description]	Description for UI Configuration.
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=uiconfig&action=create
-	 */
-	public function create_uiconfig($form) {
-	
-		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
-	
-		if (isset($form['config_name'])) {
-		}
-		else
-			$this->redirect(null, 400);
-	
-		if (!isset($form['domain']))
-			$form['domain'] ="*";
-		if (!isset($form['user']))
-			$form['user'] ="*";	
-		if (!isset($form['role']))
-			$form['role'] ="*";
-		if (!isset($form['login_type']))
-			$form['login_type'] ="*";
-	
-	
-	
-		$form['id']=$form['config_name'];
-		
-		if (!$this->Uiconfig->nsCreate($form,  'config_events', 'uiconfig'))
-			return $this->errorResponse(400, "Failure from remote end");
-			
-		$this->redirect(null, 200);
-	}
-	
-	/**
-	 * @api {post} ?object=uiconfig&action=update Update a UI Configuration
-	 * @apiName UpdateUIConfig
-	 * @apiGroup UIConfig
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-     * @apiParam {String} domain		Domain of UI Configuration to update. 
-	 * @apiParam {String} config_name	Identifies UI Configuration to update by its config name. If a UI config with the specified config name does not exist, it will created.
-	 * @apiParam {String} [user]		Identifies UI Configuration to update by user name. If a UI config with the specified user name does not exist, it will created.
-	 * @apiParam {String} [role]		Identifies UI Configuration to update by role. If a UI config with the specified role does not exist, it will created.
-	 * @apiParam {String} [login_type]	Identifies UI Configuration to update by login/access type. If a UI config with the specified login/access type does not exist, it will created.
-	 * @apiParam {String} [config_value]New value of UI Configuration.
-	 * @apiParam {String} [description]	New description for UI Configuration.
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=uiconfig&action=update
-	 */
-	public function update_uiconfig($form) {
-	
-		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
-	
-		if (isset($form['config_name'])) {
-		}
-		else
-			$this->redirect(null, 400);
-	
-		if (!isset($form['domain']))
-			$form['domain'] ="*";
-		if (!isset($form['user']))
-			$form['user'] ="*";
-		if (!isset($form['role']))
-			$form['role'] ="*";
-		if (!isset($form['login_type']))
-			$form['login_type'] ="*";
-	
-	
-	
-		$form['id']=$form['config_name'];
-	
-		if (!$this->Uiconfig->nsUpdate($form,  'config_events', 'uiconfig'))
-			return $this->errorResponse(400, "Failure from remote end");
-			
-		$this->redirect(null, 200);
-	
-	
-	
-	}
-	
-	/**
-	 * @api {post} ?object=docformetest&action=delete_uiconfig Delete_uiconfig docformetest
-	 * @apiName Delete_uiconfigdocformetest
-	 * @apiGroup docformetest
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiParam {String} config_name
-	 * @apiParam {String} [domain]
-	 * @apiParam {String} [user]
-	 * @apiParam {String} [role]
-	 * @apiParam {String} [login_type]
-	 * @apiParam {String} [id]
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=delete_uiconfig
-	 */
-	public function delete_uiconfig($form) {
-	
-		//$this->nslog('debug', '(read_cdr)' . print_r($form, true));
-	
-		if (isset($form['config_name'])) {
-		}
-		else
-			$this->redirect(null, 400);
-	
-		if (!isset($form['domain']))
-			$form['domain'] ="*";
-		if (!isset($form['user']))
-			$form['user'] ="*";
-		if (!isset($form['role']))
-			$form['role'] ="*";
-		if (!isset($form['login_type']))
-			$form['login_type'] ="*";
-	
-	
-	
-		$form['id']=$form['config_name'];
-	
-		if (!$this->Uiconfig->nsDelete($form,  'config_events', 'uiconfig'))
-			return $this->errorResponse(400, "Failure from remote end");
-			
-		$this->redirect(null, 200);
-	
-	
-	
-	}
-	
-	/**
-	 * @api {post} ?object=docformetest&action=read_defaults Read_defaults docformetest
-	 * @apiName Read_defaultsdocformetest
-	 * @apiGroup docformetest
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiParam {String} table_name
-	 * @apiParam {String} [domain]
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=read_defaults
-	 */
-	public function read_defaults($form) {
-	
-		$this->nslog('debug', '(read_defaults)' . print_r($form, true));
-	
-		if (isset($form['table_name'])) {
-		}
-		else
-			$this->redirect(null, 400);
-		
-	
-		if (!isset($form['domain']))
-			$form['domain'] ="*";
-		
-	
-	
-		$query['conditions']['table_name'] = $form['table_name'];
-	
-	
-		$i=-1;
-	
-	
-		if ($form['domain']!="*")
+		$this->nslog("debug", "(".$this->name.".count) form " . print_r($form, true));
+	        
+		if (isset($form['aor']))
 		{
-			$i++;
-			$query['conditions']['AND'][$i]['OR'][0]['domain'] = $form['domain'];
-			$query['conditions']['AND'][$i]['OR'][1]['domain'] = "*";
+			$query['aor'] = $form['aor'];
+		}
+		else if (isset($form['termination_match']))
+		{
+			$query['termination_match'] = $form['termination_match'];
+		}
+		else if (isset($form['domain']) && $form['domain']!="*")
+		{
+			$query['domain'] = $form['domain'];
+		}
+		else if (isset($form['territory']))
+		{
+			$this->nslog("debug", "(".$this->name.".read) territory " . print_r($form['territory'], true));
+			$posts = $this->Connection->query($this->__GetResellerConditions($query, $form));
+			$cnt = 0;	
+			foreach($posts as $r)
+			{
+				$cnt =$cnt+1;
+				
+			}
+			$results['xml']['total']=$cnt;
+			$this->nslog("debug", "(".$this->name.".read) results " . print_r($results, true));
+				
+			$this->set('results', $results);
+			return ;
+		}
+		elseif (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+		{
+			$isSuper =true;//super
+		}
+		else {
+			// If not enough supplied parameters, return status code 400 (Bad Request)
+			$this->redirect(null, 400);
+		}
+		$query['object'] = 'connection';
+		
+		if (isset($form['role']) )
+			$query['role']= $form['role'];
+			
+		$pPosts = $this->Connection->nsCount($query);
+		$this->nslog("debug", "(".$this->name.".count) pPosts " . print_r($pPosts, true));
+		$this->set('results', $pPosts);
+	}
+	
+	/**
+	 * @api {post} ?object=docformetest&action=read Read docformetest
+	 * @apiName Readdocformetest
+	 * @apiGroup docformetest
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
+	 * @apiParam {String} [routechain]
+	 * @apiParam {String} [role]
+	 * @apiParam {String} [aor]
+	 * @apiParam {String} [termination_match]
+	 * @apiParam {String} [domain]
+	 * @apiParam {String} [territory]
+	 * @apiPermission Reseller
+	 * @apiSampleRequest ?format=json&object=docformetest&action=read
+	 */
+	public function read($form) {
+		$this->nslog("debug", "(".$this->name.".read) form " . print_r($form, true));
+		
+		$query = $this->__GetPagintaion($form);
+		$results['xml'] = array();
+		
+		if (isset($form['routechain']) && $form['routechain'] =="yes")
+			$query['address LIKE']= "<%>";
+		else if (isset($form['routechain']) && $form['routechain'] =="no")
+			$query['NOT']['address LIKE']= "<%>";
+		
+		if (isset($form['role']) )
+			$query['role']= $form['role'];
+		
+		if (isset($form['aor']))
+		{
+			$query['aor'] = $form['aor'];
+			$query['limit'] = "1";
+		}
+		else if (isset($form['termination_match']))
+		{
+			$query['termination_match'] = $form['termination_match'];
+			$query['limit'] = "1";
+		}
+		else if (isset($form['domain']) && $form['domain']!="*")
+		{
+			$query['domain'] = $form['domain'];
+		}
+		else if (isset($form['territory']))
+		{
+			$this->nslog("debug", "(".$this->name.".read) territory " . print_r($form['territory'], true));
+			$posts = $this->Connection->query($this->__GetResellerConditions($query, $form));
+			
+			foreach($posts as $r)
+			{
+				//
+				//$r['dialplan_config']['domain_owner'] = $r['domains_config']['domain_owner'];
+				//$r['dialplan_config']['domain_description'] = $r['domains_config']['domain_description'];
+				if ($this->startsWith($r['gateway_config']['address'], "sip:"))
+				{
+					$query = array('conditions' => array('Device.aor' => $r['gateway_config']['address']));
+					/* Find specified conference bridge. */
+					if(!isset($this->Device))
+						$this->loadModel("Device");
+					$dev = $this->Device->find('first', $query);
+					if (isset($dev['Device']))
+						$r['gateway_config']['registration']= $dev['Device'];
+					
+					
+					
+				}
+
+				
+				
+				//$this->nslog("debug", "(".$this->name.".read) results " . print_r($results, true));
+				
+				if (isset($form['routechain']) && $form['routechain'] =="yes")
+				{
+						
+						
+					if(!isset($this->Route))
+						$this->loadModel("Route");
+					
+					$query = array('conditions' =>
+							array('Route.forward_request_matchrule'
+									=> str_replace("<","",str_replace(">","",$r['gateway_config']['address']))));
+					
+					$routes = $this->Route->find('all', $query);
+					
+					if(isset($routes[0]))
+						$r['gateway_config']['route'] = $routes[0];
+				}
+				
+				$results['xml']['connection'][]=$r['gateway_config'];
+			}
+			
+			$this->nslog("debug", "(".$this->name.".read) results " . print_r($results, true));
+			
+			$this->nslog("debug", "(".$this->name.".read) end---- " );
+			$this->set('results', $results);
+			return ;
+		}
+		elseif (isset($this->token['scope']) && $this->token['scope'] =="Super User")
+		{
+			$isSuper =true;//super
 		}
 		else
-			$query['conditions']['domain'] =$form['domain'];
+			$this->redirect(null, 400);
+		
+		
+		
+		
+		$query['object'] = 'connection';
+		$pPosts = $this->Connection->nsRead($query);
+		//$this->nslog("debug", "(".$this->name.".read_connections) pPostsX " . print_r($pPosts, true));
+		
+		if (isset($pPosts['xml']['connection']))
+    		foreach($pPosts['xml']['connection'] as $r)
+    		{
+    			//$this->nslog("debug", "(".$this->name.".read_connections) rsX " . print_r($r, true));
+    			
+    			if ($this->startsWith($r['address'], "sip:"))
+    				{
+    						$query = array('conditions' => array('Device.aor' => $r['address']));
+    								/* Find specified conference bridge. */
+    						if(!isset($this->Device))
+    						$this->loadModel("Device");
+    						$dev = $this->Device->find('first', $query);
+    								if (isset($dev['Device']))
+    							$r['registration']= $dev['Device'];
+    								
+    				}
+    				//if ($this->startsWith($r['address'], "<"))
+    				{
+    				
+    				
+    					if(!isset($this->Route))
+    						$this->loadModel("Route");
+    						
+    					$query = array('conditions' =>
+    							array('Route.forward_request_matchrule'
+    									=> str_replace("<","",str_replace(">","",$r['address']))));
+    						
+    					$routes = $this->Route->find('all', $query);
+    					
+    					$this->nslog("debug", "(".$this->name.".read_ routes) r[route] " . print_r($routes, true));
+    					
+    					if(isset($routes[0]))
+    						$r['route'] = $routes[0];
+    					elseif (isset($routes) && is_array($routes))
+    						$r['route'][0] = $routes;
+    					
+    					$this->nslog("debug", "(".$this->name.".read_connectionsY) $r[route] " . print_r($r['route'], true));
+    					if (isset($r['route']['routecon']) && is_array($r['route']['routecon']) && !isset($r['route']['routecon'][0]) )
+    					{
+    						$this->nslog("debug", "(".$this->name.".read_connections2Z) $r[route] " . print_r($r['route']['routecon'], true));
+    						$r['route']['routecon'][0] = $r['route']['routecon'];
+    						unset($r['route']['routecon']);
+    						$this->nslog("debug", "(".$this->name.".read_connections2) $r[route] " . print_r($r['route'], true));
+    					}
+    				}
+    				$results['xml']['connection'][]=$r;
+    		}
+		
+		
+		$this->nslog("debug", "(".$this->name.".read_connections) resultsX " . print_r($results, true));
+		$this->set('results', $results);
+	}
 
 	
-		$query['order']['field_name'] = 'DESC';
-		$query['order']['domain'] = 'DESC';
-		
-		$query['fields'][0]='DISTINCT field_name';
-		$query['fields'][1]='domain';
-		$query['fields'][2]='default_value';
 	
-	
-		$results = $this->Defaultvalue->find('all', $query);
-		//$pPosts = array();
-		$used = array();
-		$pPosts['xml']['defaultvalue']= array();
-		foreach ($results as $result) {
-			if (in_array( $result['Defaultvalue']['field_name'], $used))
-				continue;
-			$used[$result['Defaultvalue']['field_name']]= $result['Defaultvalue']['field_name'];
-			$pPosts['xml']['defaultvalue'][] = $result['Defaultvalue'];
-		}
-			
-		$this->set('results', $pPosts);
-		//}
-	
-	
-	
-		}
-		
-		public function eventCreate($event) {
-			$this->nslog("debug", "(".$this->name.".eventCreate) event " . print_r($event, true));
-			if (!isset($event['object'])) {
-				
-			}
-			else if ($event['object']=='uiconfig') {
-				$this->Uiconfig->nsCreateFromSbus($event);
-			}
-			
-			return true;
-		}
-		
 	/**
-	 * @api {post} ?object=docformetest&action=eventUpdate EventUpdate docformetest
-	 * @apiName EventUpdatedocformetest
-	 * @apiGroup docformetest
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=eventUpdate
+	 * @api {post} ?object=connection&action=create Create a Connection
+	 * @apiGroup Connection
+	 * @apiName CreateConnection
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN"
+	 * @apiParam {String} aor aor
+	 * @apiParam {String} domain domain
+	 * @apiParam {String} address address
+	 * @apiSampleRequest ?object=connection&action=create
+	 * @apiPermission User
 	 */
-		public function eventUpdate($event) {
-		
-			$this->nslog("debug", "(".$this->name.".eventUpdate) event " . print_r($event, true));
-		
-			if (!isset($event['object'])) {
-				
-			}
-			else if ($event['object']=='uiconfig') {
-				$this->Uiconfig->nsUpdateFromSbus($event);
-			}
-		}
-		
-	/**
-	 * @api {post} ?object=docformetest&action=eventDelete EventDelete docformetest
-	 * @apiName EventDeletedocformetest
-	 * @apiGroup docformetest
-	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN".
-	 * @apiPermission Reseller
-	 * @apiSampleRequest ?format=json&object=docformetest&action=eventDelete
-	 */
-		public function eventDelete($event) {
-		
-			$this->nslog("debug", "(".$this->name.".eventDelete) event " . print_r($event, true));
-		
-			if (!isset($event['object'])) {
-				
-			}
-			else if ($event['object']=='uiconfig') {
-				$this->Uiconfig->nsDeleteFromSbus($event);
-			}
-		}
-
 	
+	public function create($form) {
+		$this->nslog("debug", "(".$this->name.".create) form " . print_r($form, true));
+		
+		if (isset($form['aor']) && isset($form['domain']))
+		{
+		}
+		else {
+			// If not enough supplied parameters, return status code 400 (Bad Request)
+			$this->redirect(null, 400);
+		}
+		
+		if (!isset($form['termination_match']))
+			$form['termination_match'] = $form['aor'];
+		
+		if (!isset($form['to_host_trans']))
+			$form['to_host_trans'] = $form['address'];
+		
+		if (!isset($form['req_host_trans']))
+			$form['req_host_trans'] = $form['address'];
 
+		
+		$form['object'] = 'connection';
+		
+		$this->nslog("debug", "(".$this->name.".create) pDevice " . print_r($pDevice, true));
+		
+		if (!$this->Connection->nsCreate($form,  'connection_events', 'connection'))
+			$this->redirect(null, 400);
+		
+		if (isset($form['route']))
+		{
+			$this->handleRoutes($form, true);
+		}
+		
+
+		$this->redirect(null, 200);
+	}
+	
+	/**
+	 * @api {post} ?object=connection&action=update Update Connection
+	 * @apiGroup Connection
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN"
+	 * 
+	 */
+	
+	public function update($form) {
+		$this->nslog("debug", "(".$this->name.".update) form " . print_r($form, true));
+		
+		if (isset($form['aor']))
+		{
+			$condtions['aor'] = $form['aor'];
+		}
+		else {
+			// If not enough supplied parameters, return status code 400 (Bad Request)
+			$this->redirect(null, 400);
+		}
+		if (!isset($form['termination_match']))
+			$form['termination_match'] = $form['aor'];
+		
+		$form['object'] = 'connection';
+		
+		$this->nslog("debug", "(".$this->name.".create) pDevice " . print_r($pDevice, true));
+		
+		if (!$this->Connection->nsUpdate($form,  'connection_events', 'connection'))
+			$this->redirect(null, 400);
+		
+		if (isset($form['route']))
+		{
+			$this->handleRoutes($form,false);
+		}
+		
+
+		$this->redirect(null, 200);
+	}
+	
+	public function handleRoutes($form,$isCreate=false)
+	{
+		$route = unserialize($form['route']);
+			
+		if (isset($route['Route']['route_option']))
+		{
+			$route['Route']['object'] = 'route';
+			$route['Route']['route_name'] = $form['description'];
+			$route['Route']['match_from'] = "*";
+			$route['Route']['class'] = "*";
+			$route['Route']['hostname'] = "*";
+			$route['Route']['route_status'] = "yes";
+			
+			$route['Route']['forward_request_matchrule'] = str_replace("<","",str_replace(">","",$form['address']));
+		
+			$this->nslog("debug", "(".$this->name.".create) route  " . print_r($route['Route'], true));
+		
+			if(!isset($this->Route))
+				$this->loadModel("Route");
+			if ($isCreate)
+			{
+				if (!$this->Route->nsCreate($route['Route'],  'NmsRoute', 'route'))
+					$this->redirect(null, 400);
+			}else{
+				if (!$this->Route->nsUpdate($route['Route'],  'NmsRoute', 'route'))
+					$this->redirect(null, 400);
+			}
+			
+			
+			{
+				$this->nslog("debug", "(".$this->name.".create) routecon  " . print_r($route['routecon'], true));
+				$indexRun=0;
+				$startCount=0;
+				if (isset($route['Route']['con_count']))
+					$startCount = $route['Route']['con_count'];
+				if(isset($route['routecon']))
+				{
+		
+					foreach ($route['routecon']	as $con)
+					{
+						$indexRun++;
+						$this->nslog("debug", "(".$this->name.".create) con   " . print_r($con, true));
+		
+						if(isset($con['name']))
+						{
+							$route['Route']['match_to'] = str_replace("<","",str_replace(">","",$form['address']));
+		
+							$route['Route']['con_host'] = $con['name'];
+							$route['Route']['con_index'] = $con['index'];
+							$route['Route']['weight'] = $con['pct'];
+							$route['Route']['cost'] = "0";
+							$route['Route']['class'] = "*";
+							$route['Route']['match_from'] = "*";
+							$route['Route']['con_user'] = "[*]";
+		
+							if(!isset($this->Routecon))
+								$this->loadModel("Routecon");
+							if (!$this->Routecon->nsUpdate($route['Route'],  'NmsRoute', 'route_con'))
+								$this->nslog("debug", "(".$this->name.".create) routecon fail " . print_r($route['Route'], true));
+						}
+					}
+				}
+				for ($x=$indexRun+1;$x<=$startCount;$x++ )
+				{
+					$route['Route']['match_to'] = str_replace("<","",str_replace(">","",$form['address']));
+					$route['Route']['con_index'] = $x;
+					$route['Route']['cost'] = "0";
+					$route['Route']['class'] = "*";
+					$route['Route']['match_from'] = "*";
+					$route['Route']['con_user'] = "[*]";
+					if (!$this->Routecon->nsDelete($route['Route'],  'NmsRoute', 'route_con'))
+						$this->nslog("debug", "(".$this->name.".delete) routecon fail " . print_r($route['Route'], true));
+				}
+			}
+		}
+		
+			
+		$this->nslog("debug", "(".$this->name.".create) routes " . print_r($route, true));
+		return true;
+	}
+
+	/**
+	 * Delete Subscriber
+	 *
+	 * Delete the specified subscriber.
+	 *
+	 * @param array $form
+	 *   A request form containing the key 'domain' and 'user'
+	 * @return mixed
+	 *   If successful, 200 (OK) and XML-encoded result
+	 *   If information missing, 400 (Bad Request)
+	 * @access public
+	 */
+	
+	/**
+	 * @api {post} ?object=connection&action=delete Delete Connection
+	 * @apiGroup Connection
+	 * @apiName DeleteConnection
+	 * @apiDescription Mind that connections to be deleted will be deleted in all domains unless specified
+	 * @apiHeader {String} Authorization Authorization value. Generally "Bearer ACCESSTOKEN"
+	 * @apiParam {String} aor aor 
+	 * @apiParam {String} domain domain
+	 * @apiSampleRequest ?object=connection&action=DELETE
+	 * @apiPermission User
+	 * @apiSuccess {String} output If Successful, 200(OK)
+	 */
+	public function delete($form) {
+		$this->nslog("debug", "(".$this->name.".delete) form " . print_r($form, true));
+		
+		if (isset($form['aor']))
+		{
+			$condtions['aor'] = $form['aor'];
+		}
+		else {
+			// If not enough supplied parameters, return status code 400 (Bad Request)
+			$this->redirect(null, 400);
+		}
+		if (!isset($form['termination_match']))
+			$form['termination_match'] = $form['aor'];
+		
+		$form['object'] = 'connection';
+		$form['action'] = 'DELETE';
+
+		
+		//if ($form['isRoute'])
+		{
+		    $query['object'] = 'connection';
+		    $query['aor'] = $condtions['aor'];
+		    $query['limit'] = "1";
+		    $pPosts = $this->Connection->nsRead($query);
+		    $this->nslog("debug", "(".$this->name.".delete) pPosts " . print_r($pPosts, true));
+		    foreach($pPosts['xml']['connection'] as $r)
+		    {
+		        $this->nslog("debug", "(".$this->name.".delete) r " . print_r($r, true));
+		        if ($this->startsWith($r['address'], "<"))
+		        {
+        	        $route['Route']['object'] = 'route';
+        	        $route['Route']['match_from'] = "*";
+        	        $route['Route']['class'] = "*";
+        	        $route['Route']['hostname'] = "*";
+        	        $route['Route']['forward_request_matchrule'] = str_replace("<","",str_replace(">","",$r['address']));
+        	        
+        	        $this->nslog("debug", "(".$this->name.".create) route  " . print_r($route['Route'], true));
+        	        
+        	        if(!isset($this->Route))
+        	            $this->loadModel("Route");
+        	        if (!$this->Route->nsDelete($route['Route'],  'NmsRoute', 'route'))
+        	        {
+        	            //ok to coninue
+        	        }
+		        }
+		    }
+		    
+		}
+		
+		$this->nslog("debug", "(".$this->name.".delete) form " . print_r($form, true));
+		if (!$this->Connection->nsDelete($form,  'connection_events', 'connection'))
+			$this->redirect(null, 400);
+		
+		
+		
+	
+		$this->redirect(null, 200);
+	}
+	
+	public function eventCreate($event) {
+
+		$this->nslog("debug", "(".$this->name.".eventCreate) event " . print_r($event, true));
+		
+		if (!isset($event['object'])) {
+		}
+		else if ($event['object']=='connection') {
+			$this->Connection->nsCreateFromSbus($event);
+		}
+	}
+	
+	public function eventUpdate($event) {
+
+		$this->nslog("debug", "(".$this->name.".eventUpdate) event " . print_r($event, true));
+		
+		if (!isset($event['object'])) {
+		}
+		else if ($event['object']=='connection') {
+			$this->Connection->nsUpdateFromSbus($event);
+		}
+	}
+	
+	public function eventDelete($event) {
+
+		$this->nslog("debug", "(".$this->name.".eventDelete) event " . print_r($event, true));
+		
+		if (!isset($event['object'])) {
+		}
+		else if ($event['object']=='connection') {
+			$this->Connection->nsDeleteFromSbus($event);
+		}
+	}
+	
+	public function __convertBoolToEnum($value)
+	{
+		if ($value==1 || strtolower($form['save_participants'])=="yes" || $value==true)
+			return("yes");
+		return("no");
+	}
+	
 	
 	
 }
