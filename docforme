@@ -142,8 +142,7 @@ function setOptionalParams {
 
 function readModel {
 	directory=$(dirname $(dirname $(readlink -f $1)))"/Model"
-	mfilename=${1%Controller*}
-	mfilename=${mfilename%s}"."
+	mfilename="${1^}"".php"
 	mfile=$(find $directory -name "$mfilename*")
 	
 	linenumberRM=1
@@ -175,15 +174,13 @@ function readModel {
 }
 
 function createDocBlock {
-	apiGroup=${1%Controller*}
-	actionName=$2
-	objectName=$apiGroup
-	description=$actionName' '$objectName
-	description="${description^}"
-	apiName=$actionName$objectName
-	apiName="${apiName^}"
-	objectName="${objectName,,}"
-	objectName=${objectName%s}
+	objectName=$1 #disposition
+	actionName=${2%_*}  #read_disposition-> read
+	apiGroup="${1^}"  #Disposition
+	description=$actionName' '$apiGroup's'
+	description="${description^}" #Read Dispositions
+	apiName=$actionName$apiGroup
+	apiName="${apiName^}"  #ReadDisposition
 
 	echo -ne '	/**\n' >> $3
 	echo -ne '	 * @api {post} ?object='"$objectName"'&action='"$actionName"' '"$description"'\n' >> $3
@@ -225,7 +222,7 @@ function createDocBlock {
 	fi
 
 	if [[ "$actionName" == "count"* ]]; then
-	echo -ne '	 * @apiSuccess {String} total	Total number of '"$apiGroup"' in the specified domain.\n' >> $3 
+	echo -ne '	 * @apiSuccess {String} total	Total number of '"$apiGroup"'s in the specified domain.\n' >> $3 
 	fi
 
 	if [[ "$actionName" == "read"* ]]; then
@@ -242,10 +239,14 @@ function createDocBlock {
 
 function main {
 	IFS=''
-	fnames=( "${@:2}" )
-	numberoflines=$(wc -l < $1)
-	
-	for i in "${fnames[@]}"
+
+	ControllerGroup=$(findControllerGroup "$1")
+	apiGroupFile="${ControllerGroup^}""Controller.php"
+	ControllerGroup=${ControllerGroup%s}
+
+	getFuncNames $1 $apiGroupFile $ControllerGroup
+
+	for i in "${functionNames[@]}"
 	do
 		linenumber=1
 		beg="null"
@@ -265,7 +266,7 @@ function main {
 		
 			if [ $functionfound == "true" ]; then
 				copyrequest=$beg","$end"w dfmtemp"
-				sed -n "$copyrequest" $1
+				sed -n "$copyrequest" $apiGroupFile
 				getApiParams dfmtemp
 				setOptionalParams dfmtemp
 				rm dfmtemp
@@ -277,7 +278,7 @@ function main {
 				createDocBlock $1 $i dfmtemp
 			
 				insertlineno=$((beg-1))
-				sed -i "${insertlineno}r dfmtemp" $1
+				sed -i "${insertlineno}r dfmtemp" $apiGroupFile
 			
 				rm dfmtemp
 				break
@@ -292,14 +293,134 @@ function main {
 				fi
 			fi
 			linenumber=$((linenumber+1))
-		done < $1
+		done < $apiGroupFile
 
 		unset paramsArray
 		unset successArray
 	done
 }
 
+function getFuncName {
+	func=$1
+	func=${func#*this->}
+	func=${func%%(\$form)*}
+	echo -e "$func"
+} 
+
+function getFuncNames {
+	IFS=''
+
+	count=0
+
+	for iMain in "${CRUDmethods[@]}"
+	do
+		linenumber=1
+
+		CRUDmethodfound="false"
+		mbracketlevel=0
+		condbracketlvl="null"
+		noreroutes="true"
+
+		while read lineMain
+		do
+			if [[ $lineMain == *"{"* ]]; then
+				mbracketlevel=$((mbracketlevel+1))
+			fi
+
+			if [[ $lineMain == *"}"* ]]; then
+				mbracketlevel=$((mbracketlevel-1))
+
+				if [[ $CRUDmethodfound == "true" && $mbracketlevel -eq 1 ]]; then
+					#Ensures only the necessary CRUD methods are added (ex. disposition doesn't have a 'create' function)
+					if [[ $noreroutes == "true" && "$1" == "$3" ]]; then
+						functionNames[$count]=$iMain
+						count=$((count+1))
+					fi
+					break
+				fi
+			fi
+
+			if [[ $lineMain == *"function "$iMain"("* ]]; then
+				CRUDmethodfound="true"
+			fi
+
+			if [[ $CRUDmethodfound == "true" ]]; then
+
+				#could cause problems if theres is nested form['object']=='blah'
+				if [[ $lineMain == *"form['object']"*"=="*'"'$1'"'* || $lineMain == *"form['object']"*"=="*"'"$1"'"* ]]; then
+					condbracketlvl=$mbracketlevel
+				fi
+
+				if [[ $condbracketlvl != "null" && $mbracketlevel -ge $condbracketlvl ]]; then
+					if [[ $lineMain == *"this->"$iMain"_"* ]]; then
+						funcName=$(getFuncName "$lineMain")
+						funcNameUnique="true"
+
+						#Make sure function name is unique and plural form
+						for ((h=0; h<${#functionNames[@]}; h++))
+						do
+							if [[ $funcName == "${functionNames[$h]}" || $funcName"s" == "${functionNames[$h]}" ]]; then
+								funcNameUnique="false"
+							fi
+							if [[ $funcName == "${functionNames[$h]}""s" ]]; then
+								unset functionNames[$h]
+							fi
+						done
+						if [[ $funcNameUnique == "true" ]]; then
+							functionNames[$count]=$funcName
+							count=$((count+1))
+							noreroutes="false"
+						fi	
+					fi
+				fi
+
+				if [[ $condbracketlvl != "null" && $mbracketlevel -lt $condbracketlvl ]]; then
+					condbracketlvl="null"
+				fi
+
+			fi
+
+			linenumber=$((linenumber+1))
+		done < $2
+	done
+}
+
+function getApiGroup {
+	apiGroup=$1
+	apiGroup=${apiGroup#*=> \'}
+	apiGroup=${apiGroup%%\'*,\'action*}
+	echo -e "$apiGroup"
+}
+
+function findControllerGroup {
+	IFS=''
+
+	readCase="off"
+	while read lineFCG
+	do
+		if [[ $lineFCG == *'case "'$1'":'* ]]; then
+			readCase="on"
+		fi
+
+		if [[ $readCase == "on" ]]; then
+			if [[ $lineFCG == *"requestAction(array('controller' =>"* ]]; then
+				apiGroup=$(getApiGroup "$lineFCG")
+				echo "$apiGroup"
+				break
+			fi
+		fi
+
+	done < ApisController.php
+}
+
 paramsArray=()
 successArray=()
+functionNames=()
 
-main "$@"
+#these are the base functions to document for an api group
+CRUDmethods=('count' 'create' 'read' 'update' 'delete')
+
+main $1
+
+echo "API Group: ""$1"
+echo "Methods Documented: ""${functionNames[@]}"
