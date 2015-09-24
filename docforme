@@ -260,7 +260,7 @@ function main {
 				mbracketlevel=$((mbracketlevel+1))
 			fi
 
-			if [[ $line == *"function "$i* ]]; then
+			if [[ $line == *"function "$i"("* ]]; then
 				beg=$linenumber
 			fi
 		
